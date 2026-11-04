@@ -1,0 +1,72 @@
+{
+  "id": 6,
+  "title": "Data storage used",
+  "type": "gauge",
+  "gridPos": {
+    "x": 18,
+    "y": 1,
+    "w": 3,
+    "h": 7
+  },
+  "datasource": {
+    "type": "prometheus",
+    "uid": "REPLACE_WITH_PROMETHEUS_UID"
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "expr": "100*(1-node_filesystem_avail_bytes{job=~\"(dot.*|spot.*|show.*|satellite.*)-node\",host=~\"REPLACE_WITH_HOST\",mountpoint=\"/data\"}/node_filesystem_size_bytes{job=~\"(dot.*|spot.*|show.*|satellite.*)-node\",host=~\"REPLACE_WITH_HOST\",mountpoint=\"/data\"})",
+      "legendFormat": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "REPLACE_WITH_PROMETHEUS_UID"
+      },
+      "instant": true,
+      "range": false
+    }
+  ],
+  "description": "Space unavailable to the service account on /data. Root filesystem is separate.",
+  "fieldConfig": {
+    "defaults": {
+      "unit": "percent",
+      "noValue": "No data",
+      "decimals": 1,
+      "color": {
+        "mode": "thresholds"
+      },
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          },
+          {
+            "color": "yellow",
+            "value": 75
+          },
+          {
+            "color": "red",
+            "value": 90
+          }
+        ]
+      },
+      "min": 0,
+      "max": 100
+    },
+    "overrides": []
+  },
+  "options": {
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "orientation": "auto",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto"
+  }
+}

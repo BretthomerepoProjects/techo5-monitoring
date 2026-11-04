@@ -1,0 +1,110 @@
+{
+  "id": 5,
+  "title": "Wi-Fi throughput",
+  "type": "timeseries",
+  "description": "Receive and transmit bits/second on wlan0. Five-minute rates; 60-second exporter scrape interval.",
+  "gridPos": {
+    "x": 10,
+    "y": 1,
+    "w": 8,
+    "h": 7
+  },
+  "datasource": {
+    "type": "prometheus",
+    "uid": "REPLACE_WITH_PROMETHEUS_UID"
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "expr": "8*rate(node_network_receive_bytes_total{job=~\"(dot.*|spot.*|show.*|satellite.*)-node\",host=~\"REPLACE_WITH_HOST\",device=\"wlan0\"}[5m])",
+      "legendFormat": "Receive",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "REPLACE_WITH_PROMETHEUS_UID"
+      },
+      "instant": false,
+      "range": true
+    },
+    {
+      "refId": "B",
+      "expr": "8*rate(node_network_transmit_bytes_total{job=~\"(dot.*|spot.*|show.*|satellite.*)-node\",host=~\"REPLACE_WITH_HOST\",device=\"wlan0\"}[5m])",
+      "legendFormat": "Transmit",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "REPLACE_WITH_PROMETHEUS_UID"
+      },
+      "instant": false,
+      "range": true
+    }
+  ],
+  "fieldConfig": {
+    "defaults": {
+      "unit": "bps",
+      "noValue": "No data",
+      "color": {
+        "mode": "palette-classic"
+      },
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          }
+        ]
+      },
+      "custom": {
+        "drawStyle": "line",
+        "lineWidth": 2,
+        "fillOpacity": 10,
+        "showPoints": "never",
+        "spanNulls": false
+      }
+    },
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Receive"
+        },
+        "properties": [
+          {
+            "id": "color",
+            "value": {
+              "mode": "fixed",
+              "fixedColor": "green"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "Transmit"
+        },
+        "properties": [
+          {
+            "id": "color",
+            "value": {
+              "mode": "fixed",
+              "fixedColor": "blue"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "options": {
+    "legend": {
+      "displayMode": "list",
+      "placement": "bottom",
+      "calcs": [
+        "lastNotNull"
+      ]
+    },
+    "tooltip": {
+      "mode": "multi",
+      "sort": "desc"
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "id": 7,
+  "title": "Load · 1 / 5 / 15m",
+  "type": "stat",
+  "gridPos": {
+    "x": 21,
+    "y": 1,
+    "w": 3,
+    "h": 7
+  },
+  "datasource": {
+    "type": "prometheus",
+    "uid": "REPLACE_WITH_PROMETHEUS_UID"
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "expr": "node_load1{job=~\"(dot.*|spot.*|show.*|satellite.*)-node\",host=~\"REPLACE_WITH_HOST\"}",
+      "legendFormat": "1m",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "REPLACE_WITH_PROMETHEUS_UID"
+      },
+      "instant": true,
+      "range": false
+    },
+    {
+      "refId": "B",
+      "expr": "node_load5{job=~\"(dot.*|spot.*|show.*|satellite.*)-node\",host=~\"REPLACE_WITH_HOST\"}",
+      "legendFormat": "5m",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "REPLACE_WITH_PROMETHEUS_UID"
+      },
+      "instant": true,
+      "range": false
+    },
+    {
+      "refId": "C",
+      "expr": "node_load15{job=~\"(dot.*|spot.*|show.*|satellite.*)-node\",host=~\"REPLACE_WITH_HOST\"}",
+      "legendFormat": "15m",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "REPLACE_WITH_PROMETHEUS_UID"
+      },
+      "instant": true,
+      "range": false
+    }
+  ],
+  "description": "Load includes runnable and uninterruptible-wait tasks. On these Android-derived kernels, driver waits can raise load while CPU is idle. No overload threshold is applied.",
+  "fieldConfig": {
+    "defaults": {
+      "unit": "none",
+      "noValue": "No data",
+      "decimals": 1,
+      "color": {
+        "mode": "fixed",
+        "fixedColor": "blue"
+      },
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "blue",
+            "value": null
+          }
+        ]
+      }
+    },
+    "overrides": []
+  },
+  "options": {
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "orientation": "auto",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name"
+  }
+}

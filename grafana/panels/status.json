@@ -1,0 +1,85 @@
+{
+  "id": 2,
+  "title": "Status",
+  "type": "stat",
+  "gridPos": {
+    "x": 0,
+    "y": 1,
+    "w": 2,
+    "h": 7
+  },
+  "datasource": {
+    "type": "prometheus",
+    "uid": "REPLACE_WITH_PROMETHEUS_UID"
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "expr": "up{job=~\"(dot.*|spot.*|show.*|satellite.*)-node\",host=~\"REPLACE_WITH_HOST\"}",
+      "legendFormat": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "REPLACE_WITH_PROMETHEUS_UID"
+      },
+      "instant": true,
+      "range": false
+    }
+  ],
+  "description": "Prometheus scrape availability; not a full voice-service health check.",
+  "fieldConfig": {
+    "defaults": {
+      "unit": "none",
+      "noValue": "No data",
+      "decimals": 0,
+      "color": {
+        "mode": "thresholds"
+      },
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "red",
+            "value": null
+          },
+          {
+            "color": "green",
+            "value": 1
+          }
+        ]
+      },
+      "mappings": [
+        {
+          "type": "value",
+          "options": {
+            "0": {
+              "text": "DOWN",
+              "color": "red"
+            },
+            "1": {
+              "text": "UP",
+              "color": "green"
+            }
+          }
+        }
+      ]
+    },
+    "overrides": []
+  },
+  "options": {
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "orientation": "auto",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value",
+    "justifyMode": "center"
+  }
+}

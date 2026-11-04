@@ -139,3 +139,7 @@ Versioned GitHub releases are the update source for HACS. After a new release is
 ### Recovering after a partially completed SSH setup
 
 If SSH was enabled and the key was sent but setup then failed, start Add Integration again and turn off **Prepare SSH through ESPHome before testing**. Setup now performs only a public host-key handshake, explicit first-use trust if needed, and the SSH connection test. It does not resend or replace keys or change the switch. Version 0.1.4 fixes blocking file access during AsyncSSH options construction by performing it in HA's executor and disabling unused host-based authentication keys.
+
+## Grafana dashboard and panel JSON
+
+The optional [Grafana files and setup guide](grafana/README.md) include a complete fleet dashboard and six standalone panel JSON files for existing dashboards. They use only built-in Grafana panels and the built-in Prometheus data source; no additional plugins are required. Prometheus scrape configuration is supplied as a template. These files display system metrics only; logging is outside their scope. HACS installs the integration, not Grafana resources.

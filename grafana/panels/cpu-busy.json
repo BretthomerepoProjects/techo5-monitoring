@@ -1,0 +1,72 @@
+{
+  "id": 3,
+  "title": "CPU busy",
+  "type": "gauge",
+  "gridPos": {
+    "x": 2,
+    "y": 1,
+    "w": 4,
+    "h": 7
+  },
+  "datasource": {
+    "type": "prometheus",
+    "uid": "REPLACE_WITH_PROMETHEUS_UID"
+  },
+  "targets": [
+    {
+      "refId": "A",
+      "expr": "100*(1-avg by(host)(rate(node_cpu_seconds_total{job=~\"(dot.*|spot.*|show.*|satellite.*)-node\",host=~\"REPLACE_WITH_HOST\",mode=\"idle\"}[5m])))",
+      "legendFormat": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "REPLACE_WITH_PROMETHEUS_UID"
+      },
+      "instant": true,
+      "range": false
+    }
+  ],
+  "description": "Percent busy across reported CPUs, 5-minute rate. Load average is separate and can include kernel waits.",
+  "fieldConfig": {
+    "defaults": {
+      "unit": "percent",
+      "noValue": "No data",
+      "decimals": 1,
+      "color": {
+        "mode": "thresholds"
+      },
+      "thresholds": {
+        "mode": "absolute",
+        "steps": [
+          {
+            "color": "green",
+            "value": null
+          },
+          {
+            "color": "yellow",
+            "value": 75
+          },
+          {
+            "color": "red",
+            "value": 90
+          }
+        ]
+      },
+      "min": 0,
+      "max": 100
+    },
+    "overrides": []
+  },
+  "options": {
+    "reduceOptions": {
+      "values": false,
+      "calcs": [
+        "lastNotNull"
+      ],
+      "fields": ""
+    },
+    "orientation": "auto",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto"
+  }
+}

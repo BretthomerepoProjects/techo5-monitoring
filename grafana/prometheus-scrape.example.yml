@@ -1,0 +1,13 @@
+# Merge this job into your existing scrape_configs list.
+# Replace the target placeholders before validating or reloading.
+scrape_configs:
+  - job_name: satellite-node
+    scrape_interval: 60s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['REPLACE_WITH_SATELLITE_A_ADDRESS:9100']
+        labels:
+          host: satellite-a
+      - targets: ['REPLACE_WITH_SATELLITE_B_ADDRESS:9100']
+        labels:
+          host: satellite-b
