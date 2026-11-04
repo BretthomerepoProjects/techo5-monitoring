@@ -1,0 +1,10 @@
+check:
+  name: Check satellite
+  description: Administrator-only, bounded read-only SSH inspection. No installation, restart or automatic polling.
+  fields:
+    entry_id:
+      name: Configuration entry ID
+      description: Copy entry_id from the satellite manager status sensor attributes.
+      required: true
+      selector:
+        text:

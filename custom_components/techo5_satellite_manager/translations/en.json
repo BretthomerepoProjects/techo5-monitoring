@@ -1,0 +1,7 @@
+{
+  "config": {
+    "step": {"user": {"title": "Add TECHO5 satellite (manual checks only)", "description": "No SSH connection is made during setup. Prepare the dedicated key and verified known_hosts under /config/satellite_manager/ssh first. Deployment is unavailable in this prototype.", "data": {"name": "Name", "host": "Private IPv4 address", "port": "SSH port", "key_name": "Private key filename"}}},
+    "error": {"invalid_settings": "Use a private IPv4 address and existing credential files in satellite_manager/ssh. Symlinks and path separators are rejected."},
+    "abort": {"already_configured": "This satellite is already configured"}
+  }
+}
