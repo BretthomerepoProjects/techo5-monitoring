@@ -4,7 +4,7 @@
 
 A Home Assistant custom integration for inspecting TECHO5 Linux satellites through SSH.
 
-**Early prototype, version 0.1.2.** The current version offers a device-page **Check satellite** button and a status sensor. It makes no remote changes. Exporter deployment, log forwarding, start/stop controls and automatic recovery are being developed separately and are not available in this version. No stable release has been declared.
+**Early prototype, version 0.1.3.** The current version offers a device-page **Check satellite** button and a status sensor. Optional setup can enable SSH and provision public keys through an existing encrypted ESPHome connection, with explicit confirmation. The manual check is read-only. Exporter deployment, log forwarding, start/stop controls and automatic recovery are being developed separately and are not available in this version. No stable release has been declared.
 
 ## Current behavior
 
@@ -52,9 +52,24 @@ This is custom-repository support, not acceptance into the default HACS store. A
 
 The check requires an HA administrator. Home Assistant Container supports this custom integration; no Supervisor app is needed.
 
+## Prepare SSH during setup
+
+When adding a satellite, **Prepare SSH through ESPHome before testing** is enabled by default. The satellite must already be paired with HA's ESPHome integration using API encryption.
+
+1. Enter its private IPv4 address and the filename of the unencrypted SSH key stored locally in HA.
+2. Select the satellite's SSH switch. Setup matches the switch to the connected ESPHome device's IP and node-specific `ssh_keys` action; a different device or unencrypted API connection is refused.
+3. Review the target and local key fingerprint. Include additional public keys to retain and explicitly confirm replacement of the authorized-key list.
+4. Setup enables the SSH switch, derives and sends only public keys through ESPHome, and waits for the SSH listener.
+5. For a first connection, explicitly confirm the displayed SSH host-key fingerprint. Compare it through an independently trusted channel when available. A saved key mismatch is refused, never silently replaced.
+6. Setup tests SSH with the configured key and strict saved-host verification before creating the entry. A failed test can be retried without pushing keys again.
+
+For an existing Satellite Manager entry, **Configure** opens this same explicit provisioning flow. No key provisioning runs on startup, on a check-button press, or on a timer. Config entries store filenames and connection settings, never private keys, public-key lists or passphrases. Device provisioning uses the existing encrypted ESPHome link and does not require SSH to be working first.
+
+Provisioning changes device security settings. A failed connection test does not restore the previous authorized-key list or turn SSH off. Include every public key you want retained; the API cannot retrieve the old list for automatic merging. A timed-out action may still complete on the device, so check its state before retrying provisioning. This is not rollback of firmware and never starts a firmware update.
+
 ## Removal and rollback
 
-Disable or remove the integration entry. If the integration prevents startup, stop HA and move only the `techo5_satellite_manager` component folder out of `custom_components`, then start HA again. Preserve your original configuration and SSH access. This version makes no satellite changes to undo.
+Disable or remove the integration entry. If the integration prevents startup, stop HA and move only the `techo5_satellite_manager` component folder out of `custom_components`, then start HA again. Preserve your original configuration and SSH access. Removing the integration does not disable satellite SSH or restore a key list changed during optional provisioning. Use the existing trusted ESPHome controls to restore those device settings if needed.
 
 HA backups which include the credential directory contain sensitive SSH access. Protect those backups and verify that credentials are restored with the intended permissions. Nothing from your live configuration should be committed to this repository.
 

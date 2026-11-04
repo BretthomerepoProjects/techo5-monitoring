@@ -97,3 +97,11 @@ class SSHTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(core.CheckError, "authentication_failed"):
             await ssh.probe(self.hass, self.settings, core.PROBE)
         self.assertFalse(self.commands)
+
+    async def test_host_key_handshake_requires_no_authentication(self):
+        options = asyncssh.SSHClientConnectionOptions(
+            config=None, client_keys=[], agent_path=None, password_auth=False, kbdint_auth=False)
+        key = await asyncio.wait_for(asyncssh.get_server_host_key(
+            "127.0.0.1", port=self.port, config=None, options=options), timeout=3)
+        self.assertEqual(key, self.host_key.convert_to_public())
+        self.assertFalse(self.commands)

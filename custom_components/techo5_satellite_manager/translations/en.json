@@ -1,7 +1,103 @@
 {
   "config": {
-    "step": {"user": {"title": "Add TECHO5 satellite (manual checks only)", "description": "No SSH connection is made during setup. Prepare the dedicated key and verified known_hosts under /config/satellite_manager/ssh first. Deployment is unavailable in this prototype.", "data": {"name": "Name", "host": "Private IPv4 address", "port": "SSH port", "key_name": "Private key filename"}}},
-    "error": {"invalid_settings": "Use a private IPv4 address and existing credential files in satellite_manager/ssh. Symlinks and path separators are rejected."},
-    "abort": {"already_configured": "This satellite is already configured"}
+    "step": {
+      "user": {
+        "title": "Add TECHO5 satellite",
+        "description": "Enter a satellite already connected to Home Assistant through ESPHome. Prepare SSH can enable its SSH switch and replace its authorized-key list after you confirm. The private key stays in HA.",
+        "data": {
+          "name": "Name",
+          "host": "Private IPv4 address",
+          "port": "SSH port",
+          "key_name": "Private key filename",
+          "prepare_ssh": "Prepare SSH through ESPHome before testing"
+        }
+      },
+      "bootstrap": {
+        "title": "Enable SSH and provision public keys",
+        "description": "Target: {host}. Local key fingerprint: {fingerprint}. Select this device's SSH switch. After confirmation, setup enables SSH, REPLACES its authorized-key list, then tests the listener. Include additional public keys you want retained. A failed test does not undo a key-list change or disable SSH. Never enter a private key.",
+        "data": {
+          "ssh_switch": "Satellite SSH switch",
+          "additional_keys": "Additional public keys to retain (optional)",
+          "confirm_replace": "I confirm this target and replacing its SSH authorized-key list"
+        }
+      },
+      "trust": {
+        "title": "Confirm the satellite SSH host key",
+        "description": "First-use SSH host key for {host}: {fingerprint}. Confirm this is the intended device. Compare the fingerprint through an independently trusted channel where available. Trust is saved locally; changed saved keys are never replaced automatically.",
+        "data": {
+          "trust_host_key": "I trust this device and fingerprint"
+        }
+      },
+      "verify": {
+        "title": "Test SSH connection",
+        "description": "Testing SSH to {host} using the saved host key. Submit to retry the connection test only; public keys will not be pushed again."
+      }
+    },
+    "error": {
+      "invalid_settings": "Use a private IPv4 address and an existing private-key filename under satellite_manager/ssh. Paths and symlinks are rejected.",
+      "invalid_key": "The local key file or an additional public key is invalid. Only supported unencrypted private keys can be used locally; never paste a private key into this form.",
+      "confirmation_required": "Confirm the selected target and action to continue.",
+      "invalid_target": "Select an available SSH switch belonging to this satellite's ESPHome device.",
+      "target_mismatch": "The selected ESPHome device is connected at a different IP address.",
+      "encryption_required": "An encrypted ESPHome API connection is required before key provisioning.",
+      "missing_action": "This ESPHome device does not expose its ssh_keys action.",
+      "ssh_not_listening": "SSH did not become reachable. Verify the device's SSH switch and firmware support.",
+      "host_key_changed": "The device SSH host key differs from a saved or revoked key. Stop and verify the change; it will not be overwritten.",
+      "bootstrap_failed": "SSH preparation failed. SSH may already be enabled and the key list may already have changed. No raw credential details are logged.",
+      "host_key_rejected": "SSH host verification failed. Verify the saved host key for this address.",
+      "authentication_failed": "The device did not accept the configured SSH key.",
+      "connection_or_credentials_failed": "The SSH connection or local credential files could not be used.",
+      "probe_failed": "SSH connected but its test command failed."
+    },
+    "abort": {
+      "already_configured": "This satellite is already configured",
+      "no_bootstrap_device": "No matching available SSH switch was found on an encrypted ESPHome connection at this IP. Pair the satellite with ESPHome first, or disable Prepare SSH and configure trusted SSH access manually.",
+      "invalid_key": "The local key file or an additional public key is invalid. Only supported unencrypted private keys can be used locally; never paste a private key into this form."
+    }
+  },
+  "options": {
+    "step": {
+      "bootstrap": {
+        "title": "Enable SSH and provision public keys",
+        "description": "Target: {host}. Local key fingerprint: {fingerprint}. Select this device's SSH switch. After confirmation, setup enables SSH, REPLACES its authorized-key list, then tests the listener. Include additional public keys you want retained. A failed test does not undo a key-list change or disable SSH. Never enter a private key.",
+        "data": {
+          "ssh_switch": "Satellite SSH switch",
+          "additional_keys": "Additional public keys to retain (optional)",
+          "confirm_replace": "I confirm this target and replacing its SSH authorized-key list"
+        }
+      },
+      "trust": {
+        "title": "Confirm the satellite SSH host key",
+        "description": "First-use SSH host key for {host}: {fingerprint}. Confirm this is the intended device. Compare the fingerprint through an independently trusted channel where available. Trust is saved locally; changed saved keys are never replaced automatically.",
+        "data": {
+          "trust_host_key": "I trust this device and fingerprint"
+        }
+      },
+      "verify": {
+        "title": "Test SSH connection",
+        "description": "Testing SSH to {host} using the saved host key. Submit to retry the connection test only; public keys will not be pushed again."
+      }
+    },
+    "error": {
+      "invalid_settings": "Use a private IPv4 address and an existing private-key filename under satellite_manager/ssh. Paths and symlinks are rejected.",
+      "invalid_key": "The local key file or an additional public key is invalid. Only supported unencrypted private keys can be used locally; never paste a private key into this form.",
+      "confirmation_required": "Confirm the selected target and action to continue.",
+      "invalid_target": "Select an available SSH switch belonging to this satellite's ESPHome device.",
+      "target_mismatch": "The selected ESPHome device is connected at a different IP address.",
+      "encryption_required": "An encrypted ESPHome API connection is required before key provisioning.",
+      "missing_action": "This ESPHome device does not expose its ssh_keys action.",
+      "ssh_not_listening": "SSH did not become reachable. Verify the device's SSH switch and firmware support.",
+      "host_key_changed": "The device SSH host key differs from a saved or revoked key. Stop and verify the change; it will not be overwritten.",
+      "bootstrap_failed": "SSH preparation failed. SSH may already be enabled and the key list may already have changed. No raw credential details are logged.",
+      "host_key_rejected": "SSH host verification failed. Verify the saved host key for this address.",
+      "authentication_failed": "The device did not accept the configured SSH key.",
+      "connection_or_credentials_failed": "The SSH connection or local credential files could not be used.",
+      "probe_failed": "SSH connected but its test command failed."
+    },
+    "abort": {
+      "already_configured": "This satellite is already configured",
+      "no_bootstrap_device": "No matching available SSH switch was found on an encrypted ESPHome connection at this IP. Pair the satellite with ESPHome first, or disable Prepare SSH and configure trusted SSH access manually.",
+      "invalid_key": "The local key file or an additional public key is invalid. Only supported unencrypted private keys can be used locally; never paste a private key into this form."
+    }
   }
 }
