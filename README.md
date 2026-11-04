@@ -25,12 +25,12 @@ The prototype has been tested with Home Assistant 2026.9.3 and AsyncSSH 2.21.0. 
 1. Open **HACS > three-dot menu > Custom repositories**.
 2. Enter `https://github.com/BretthomerepoProjects/techo5-monitoring`.
 3. Select **Integration** as the type and select **Add**.
-4. Find **TECHO5 Satellite Manager**, open it, and select **Download**. With no published releases, HACS uses the default branch. This remains an experimental prototype.
+4. Find **TECHO5 Satellite Manager**, open it, and select **Download**. Select the latest versioned release offered by HACS. The default branch remains available for explicit development testing. This remains an experimental prototype.
 5. Restart Home Assistant during your maintenance window, then configure the integration under **Settings > Devices & services**.
 
 For a manually installed copy, back up the existing component code before allowing HACS to replace it. Keep the existing HA configuration entry and the credentials outside the component directory. If HACS reports a conflict, resolve the code-directory conflict; do not delete SSH credentials or the complete HA configuration. Downloading the same domain should preserve the existing configuration entry, but validate it after restart.
 
-This is custom-repository support, not acceptance into the default HACS store. A reuse license has not been selected; the HACS validator explicitly skips only that check for this prototype. No stable GitHub release is declared.
+This is custom-repository support, not acceptance into the default HACS store. A reuse license has not been selected; the HACS validator explicitly skips only that check for this prototype. Versioned GitHub releases are used for HACS update notifications; the software remains an experimental prototype.
 
 ## Installation
 
@@ -95,3 +95,7 @@ The unit and SSH transport tests do not prove full HA lifecycle behavior or comp
 All source and documentation here must be safe for public distribution. Credentials, host-key files, real device inventories, raw logs, household-specific dashboards, production configurations, binaries and backups are excluded. Use synthetic examples in issues and remove identifying details from screenshots.
 
 Licensing has not yet been selected. Public visibility is not a claim of a stable or licensed open-source release. No affiliation with upstream TECHO5, Home Assistant or Prometheus is implied.
+
+## Updating through Home Assistant
+
+Versioned GitHub releases are the update source for HACS. After a new release is published, HACS refreshes its metadata and updates its Home Assistant update entity. To refresh immediately, open this repository in HACS and use **Update information**, then open **Settings > System > Updates**. Installing integration code requires a Home Assistant restart before the new Python code runs. Publication does not automatically install or restart anything.
