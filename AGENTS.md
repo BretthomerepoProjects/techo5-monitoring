@@ -12,3 +12,5 @@ This repository is public. Treat every commit, branch, issue, test output and re
 - This software is not upstream TECHO5 firmware. Do not assume firmware compatibility from CPU architecture alone.
 - Never perform live deployment, restart or remote service changes from CI. CI does not need access to any real satellite or Home Assistant instance.
 - Choose and document a license before presenting this as a reusable open-source release. No license has been selected yet.
+
+The only binary asset permitted is the generated brand/icon.png, created by tools/build_icon.py and matched against its reviewed SHA256 in the publication guard. It contains no source image or metadata. Other binary files remain prohibited.

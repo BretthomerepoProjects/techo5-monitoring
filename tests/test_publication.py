@@ -40,3 +40,7 @@ class PublicationTests(unittest.TestCase):
         self.stage("component.py", "VALUE = " + repr(sentinel))
         (self.root / "component.py").write_text("VALUE = 1")
         self.assertNotEqual(self.result(), 0)
+
+    def test_unreviewed_brand_image_is_rejected(self):
+        self.stage("custom_components/techo5_satellite_manager/brand/icon.png", "unreviewed sentinel")
+        self.assertNotEqual(self.result(), 0)

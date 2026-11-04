@@ -1,0 +1,15 @@
+name: HACS packaging validation
+on:
+  push:
+  pull_request:
+permissions: {}
+jobs:
+  hacs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa
+        with:
+          category: integration
+          # Prototype only: no reuse license has been selected; not a default-store submission.
+          ignore: license

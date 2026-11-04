@@ -18,6 +18,18 @@ ARMv7 and ARM64 are accepted by the initial inspection probe. Architecture detec
 
 The prototype has been tested with Home Assistant 2026.9.3 and AsyncSSH 2.21.0. It requires a compatible TECHO5 Linux satellite exposing an authorized SSH login and `/etc/techo5/boot.sh`. The current prototype uses the root SSH login; its remote command is a fixed read-only inspection script. Decide whether that access is appropriate before installing it.
 
+## Install with HACS (custom repository)
+
+1. Open **HACS > three-dot menu > Custom repositories**.
+2. Enter `https://github.com/BretthomerepoProjects/techo5-monitoring`.
+3. Select **Integration** as the type and select **Add**.
+4. Find **TECHO5 Satellite Manager**, open it, and select **Download**. With no published releases, HACS uses the default branch. This remains an experimental prototype.
+5. Restart Home Assistant during your maintenance window, then configure the integration under **Settings > Devices & services**.
+
+For a manually installed copy, back up the existing component code before allowing HACS to replace it. Keep the existing HA configuration entry and the credentials outside the component directory. If HACS reports a conflict, resolve the code-directory conflict; do not delete SSH credentials or the complete HA configuration. Downloading the same domain should preserve the existing configuration entry, but validate it after restart.
+
+This is custom-repository support, not acceptance into the default HACS store. A reuse license has not been selected; the HACS validator explicitly skips only that check for this prototype. No stable GitHub release is declared.
+
 ## Installation
 
 1. Back up your Home Assistant configuration and make sure you know how to restore it.

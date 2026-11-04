@@ -1,4 +1,5 @@
 """Publication guard: examine staged/tracked content, not ignored local files."""
+import hashlib
 import ipaddress
 from pathlib import Path
 import re
@@ -22,6 +23,10 @@ for name in files:
         continue
     # Inspect exactly what will be committed, including stale staged copies.
     data = subprocess.run(['git', 'show', ':' + name], cwd=root, check=True, capture_output=True).stdout
+    if name == 'custom_components/techo5_satellite_manager/brand/icon.png':
+        if hashlib.sha256(data).hexdigest() != '62169b563eb838b57c00d88a6d99afaa16899da2182bb92672de49a81a8d878c':
+            issues.append(name + ': brand icon differs from reviewed generated asset')
+        continue
     try:
         text = data.decode('utf-8')
     except UnicodeDecodeError:
