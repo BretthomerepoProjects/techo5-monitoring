@@ -8,6 +8,7 @@ from .core import DOMAIN, validate_host, CheckError
 from .bootstrap import BootstrapError, public_identity, host_trust, prepare, server_host_key
 from .ha_bootstrap import HABootstrap, switch_choices
 from .ssh import probe
+from .node_exporter import settings_for_node
 
 
 class BootstrapFlow:
@@ -142,6 +143,28 @@ class SatelliteConfigFlow(BootstrapFlow, config_entries.ConfigFlow, domain=DOMAI
 
 class SatelliteOptionsFlow(BootstrapFlow, config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
+        return self.async_show_menu(step_id="init", menu_options=["node", "ssh"])
+
+    async def async_step_node(self, user_input=None):
+        errors = {}
+        saved = {**self.config_entry.data, **self.config_entry.options}
+        if user_input is not None:
+            try:
+                _, collector, port = settings_for_node({**saved, **user_input})
+            except (ValueError, KeyError):
+                errors["base"] = "invalid_node_settings"
+            else:
+                return self.async_create_entry(title="", data={
+                    **self.config_entry.options, "collector_host": collector,
+                    "exporter_port": port})
+        return self.async_show_form(step_id="node", errors=errors,
+            data_schema=vol.Schema({
+                vol.Required("collector_host", default=saved.get("collector_host", "")): str,
+                vol.Required("exporter_port", default=saved.get("exporter_port", 9100)):
+                    vol.All(vol.Coerce(int), vol.Range(min=1024, max=65535)),
+            }))
+
+    async def async_step_ssh(self, user_input=None):
         self._settings = dict(self.config_entry.data)
         try:
             _, self._key_fingerprint = await self.hass.async_add_executor_job(

@@ -8,3 +8,43 @@ check:
       required: true
       selector:
         text:
+
+deploy_node:
+  name: Deploy and start Node Exporter
+  description: Verify and install the pinned native payload if missing, restrict its firewall endpoint, and start it.
+  fields:
+    entry_id:
+      name: Satellite entry ID
+      required: true
+      selector:
+        text:
+
+start_node:
+  name: Start Node Exporter
+  description: Start an already installed, verified Node Exporter. Does not download or upgrade.
+  fields:
+    entry_id:
+      name: Satellite entry ID
+      required: true
+      selector:
+        text:
+
+stop_node:
+  name: Stop Node Exporter
+  description: Stop only this manager's process and remove only its exact firewall rules. No automatic recovery runs.
+  fields:
+    entry_id:
+      name: Satellite entry ID
+      required: true
+      selector:
+        text:
+
+uninstall_node:
+  name: Uninstall Node Exporter
+  description: Stop and remove only this manager's installation. Existing unmanaged installations are refused.
+  fields:
+    entry_id:
+      name: Satellite entry ID
+      required: true
+      selector:
+        text:

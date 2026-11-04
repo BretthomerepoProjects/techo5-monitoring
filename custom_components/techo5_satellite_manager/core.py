@@ -98,7 +98,8 @@ def parse_probe(output):
     values["exporter_identity"] = (
         "absent" if values["exporter_count"] == 0 else
         "multiple" if values["exporter_count"] > 1 else
-        "unsafe" if values["exporter_uid"] == 0 or values["exporter_gid"] == 0 or "0" in (values["exporter_uids"] + " " + values["exporter_gids"]).split() or int(values["exporter_caps"], 16) else
+        "capabilities_observed" if int(values["exporter_caps"], 16) else
+        "root_observed" if values["exporter_uid"] == 0 or values["exporter_gid"] == 0 or "0" in (values["exporter_uids"] + " " + values["exporter_gids"]).split() else
         "nonroot_observed"
     )
     # Non-root observed is evidence, not a declaration that the account is approved.

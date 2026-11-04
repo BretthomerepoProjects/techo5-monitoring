@@ -35,11 +35,11 @@ class Parsing(unittest.TestCase):
         self.assertEqual(core.parse_probe(GOOD)["exporter_identity"], "nonroot_observed")
         self.assertFalse(core.parse_probe(GOOD)["deployment_enabled"])
 
-    def test_root_and_capabilities_are_unsafe(self):
+    def test_root_and_capabilities_are_reported_as_observations(self):
         for output in (GOOD.replace("exporter_uids=86 86 86 86", "exporter_uids=86 86 0 86"), GOOD.replace("exporter_uid=86", "exporter_uid=0"),
                        GOOD.replace("exporter_gid=86", "exporter_gid=0"),
                        GOOD.replace("exporter_caps=0000000000000000", "exporter_caps=1")):
-            self.assertEqual(core.parse_probe(output)["exporter_identity"], "unsafe")
+            self.assertIn(core.parse_probe(output)["exporter_identity"], {"root_observed", "capabilities_observed"})
 
     def test_duplicate_unknown_missing_oversize_rejected(self):
         for output in (GOOD + "arch=aarch64\n", GOOD + "secret=password\n",

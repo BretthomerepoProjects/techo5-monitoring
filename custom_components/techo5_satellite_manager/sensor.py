@@ -1,11 +1,11 @@
-"""One status sensor per satellite, updated only on an administrator check."""
+"""Satellite and Node Exporter observations from explicit actions and read-only checks."""
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from .core import DOMAIN
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([SatelliteStatus(entry)])
+    async_add_entities([SatelliteStatus(entry), NodeExporterStatus(entry)])
 
 
 class SatelliteStatus(SensorEntity):
@@ -19,7 +19,7 @@ class SatelliteStatus(SensorEntity):
         self._attr_unique_id = entry.entry_id + "_status"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)}, "name": entry.title,
-            "manufacturer": "TECHO5", "model": "Satellite (manual checks)"}
+            "manufacturer": "TECHO5", "model": "Linux satellite"}
 
     async def async_added_to_hass(self):
         self.async_on_remove(async_dispatcher_connect(
@@ -32,5 +32,19 @@ class SatelliteStatus(SensorEntity):
     @property
     def extra_state_attributes(self):
         runtime = self.hass.data[DOMAIN]["entries"][self.entry.entry_id]
-        return {"entry_id": self.entry.entry_id, "deployment_enabled": False,
-                **runtime["result"]}
+        return {"entry_id": self.entry.entry_id, **runtime["result"],
+                "deployment_enabled": bool(runtime["settings"].get("collector_host"))}
+
+
+class NodeExporterStatus(SatelliteStatus):
+    _attr_name = "Node Exporter"
+    _attr_icon = "mdi:chart-line"
+
+    def __init__(self, entry):
+        super().__init__(entry)
+        self._attr_unique_id = entry.entry_id + "_node_exporter"
+
+    @property
+    def native_value(self):
+        runtime = self.hass.data[DOMAIN]["entries"][self.entry.entry_id]
+        return runtime["result"].get("node_state", "unknown")

@@ -2,23 +2,23 @@
 
 ![Generic satellite network icon](custom_components/techo5_satellite_manager/brand/icon.png)
 
-A Home Assistant custom integration for inspecting TECHO5 Linux satellites through SSH.
+A Home Assistant custom integration for inspecting TECHO5 Linux satellites and explicitly managing native Node Exporter metrics through SSH.
 
-**Early prototype, version 0.1.4.** The current version offers a device-page **Check satellite** button and a status sensor. Optional setup can enable SSH and provision public keys through an existing encrypted ESPHome connection, with explicit confirmation. The manual check is read-only. Exporter deployment, log forwarding, start/stop controls and automatic recovery are being developed separately and are not available in this version. No stable release has been declared.
+**Experimental version 0.2.0.** Device-page controls can deploy and start, start, stop, uninstall, and check Node Exporter. SSH bootstrap remains available through Configure. This release requires device acceptance testing; no stable release has been declared. Syslog forwarding and automatic recovery are not implemented.
 
 ## Current behavior
 
 - One configuration entry per satellite, with an operator-supplied private IPv4 address, SSH port and local key filename.
 - A manual administrator-only check, available directly from the device page.
 - Architecture, kernel, root mount flags, online CPU list, load, uptime, aggregate memory and Node Exporter process metadata.
-- Strict SSH host-key verification, a 20-second overall timeout, an 8 KiB output cap, and one check at a time.
-- No SSH connection during integration startup. No raw log, audio, command-line, application configuration or credential collection.
+- Strict SSH host-key verification, an 8 KiB output cap, a 20-second metadata timeout, bounded 35-second Node Exporter operations (150 seconds for download/deploy), and serialized operations per entry plus a remote mutation lock.
+- No automatic deployment or SSH provisioning. After Node Exporter settings are saved, read-only checks run every 60 seconds. No raw log, audio, command-line, application configuration or credential collection.
 
-ARMv7 and ARM64 are accepted by the initial inspection probe. Architecture detection does not establish firmware or deployment compatibility. A process observed as non-root is not automatically an approved security configuration. The status and attributes are observations from the most recent manual check, not continuous monitoring.
+ARMv7 and ARM64 are accepted by the initial inspection probe. Architecture detection does not establish firmware or deployment compatibility. A process observed as non-root is not automatically an approved security configuration. Status and attributes describe the latest check. A running process is not evidence that Prometheus has successfully scraped it.
 
 ## Requirements
 
-The prototype has been tested with Home Assistant 2026.9.3 and AsyncSSH 2.21.0. It requires a compatible TECHO5 Linux satellite exposing an authorized SSH login and `/etc/techo5/boot.sh`. The current prototype uses the root SSH login; its remote command is a fixed read-only inspection script. Decide whether that access is appropriate before installing it.
+SSH bootstrap has been tested with Home Assistant 2026.9.3 and AsyncSSH 2.21.0. The new Node Exporter controls have synthetic lifecycle and SSH tests; full HA and device acceptance are pending. It requires a compatible TECHO5 Linux satellite exposing an authorized SSH login and `/etc/techo5/boot.sh`. The integration uses the root SSH login. Explicit Node Exporter actions install a native executable under `/data/ha-satellite-manager/node`, run it as root on the satellite, and change only rules for its configured metrics endpoint. Root use here is limited to satellites; it is not a requirement for other monitoring servers. Decide whether that access is appropriate before installing it.
 
 ## Install with HACS (custom repository)
 
@@ -63,9 +63,25 @@ When adding a satellite, **Prepare SSH through ESPHome before testing** is enabl
 5. For a first connection, explicitly confirm the displayed SSH host-key fingerprint. Compare it through an independently trusted channel when available. A saved key mismatch is refused, never silently replaced.
 6. Setup tests SSH with the configured key and strict saved-host verification before creating the entry. A failed test can be retried without pushing keys again.
 
-For an existing Satellite Manager entry, **Configure** opens this same explicit provisioning flow. No key provisioning runs on startup, on a check-button press, or on a timer. Config entries store filenames and connection settings, never private keys, public-key lists or passphrases. Device provisioning uses the existing encrypted ESPHome link and does not require SSH to be working first.
+For an existing Satellite Manager entry, **Configure > Prepare SSH and test connection** opens this same explicit provisioning flow. No key provisioning runs on startup, on a check-button press, or on a timer. Config entries store filenames and connection settings, never private keys, public-key lists or passphrases. Device provisioning uses the existing encrypted ESPHome link and does not require SSH to be working first.
 
 Provisioning changes device security settings. A failed connection test does not restore the previous authorized-key list or turn SSH off. Include every public key you want retained; the API cannot retrieve the old list for automatic merging. A timed-out action may still complete on the device, so check its state before retrying provisioning. This is not rollback of firmware and never starts a firmware update.
+
+## Node Exporter metrics
+
+1. Open the integration entry's **Configure > Configure Node Exporter**. Enter the private IPv4 source address from which Prometheus connects and the exporter TCP port (default 9100). This is the Prometheus server address, not the HA address unless they are the same host. Saving settings does not deploy anything.
+2. On the satellite device page, press **Check satellite**. Review its architecture, kernel and existing exporter state. Initial profiles require the TECHO5 boot marker and ARMv7 with a 3.18 kernel, or ARM64 with a 4.9 kernel. Other profiles refuse deployment pending validation.
+3. Press **Deploy and start Node Exporter**. HA downloads the architecture-specific upstream v1.12.1 archive over verified HTTPS, checks its pinned archive and executable SHA256 values, and streams only the executable through strict SSH. No satellite SCP/SFTP, Internet connection, or container runtime is required. The executable is checked again remotely and installed with mode 0700 under root-owned 0700 directories. Uploads are capped at 32 MiB; at least 64 MiB of free `/data` space is required.
+4. The manager adds an allow rule for the configured Prometheus source, then a deny rule for other sources, at the front of `INPUT`, before firmware chain jumps or existing accepts. Both rules match only the satellite address and configured TCP port. It uses the legacy iptables backend and comment match; no unrelated rules, saved firmware rules, boot slots, root mounts, or init scripts are changed. The last pre-change chain snapshot, with a UTC header, remains in `firewall.before` until uninstall. Failed starts remove only new rules and the new managed process; verified installed files remain available for a retry.
+5. Configure a matching scrape target in your Prometheus server separately. The integration does not edit Prometheus. Confirm the target is **UP** and fresh `node_cpu_seconds_total`, memory, load, network, filesystem and uname samples arrive. The HA **Node Exporter** sensor reports process state and firewall observations, not scrape success.
+
+The exporter enables only CPU, memory, load, network, filesystem and uname collectors, disables exporter self-metrics, and discards its own stdout/stderr so it cannot grow a local log file. Credentials and integration options stay in HA configuration; no native payload is packaged in public Git or the integration zip.
+
+**Start** uses a verified existing installation without downloading. **Stop** terminates only a process matching the managed executable checksum, saved PID and process start time, then removes only the manager's exact endpoint rules. **Uninstall** also removes only the known managed files. No automatic recovery runs, so Stop stays stopped. To change endpoint settings, Stop first, save settings, then Deploy and start again. Removing the HA entry does not stop a remote process: use Stop or Uninstall first.
+
+Existing unmanaged exporters or init/firmware respawn installations are refused. Do not repeatedly kill them; they need a separate targeted adoption plan. A remote-operation lock is never stolen automatically. After a timeout, disconnect, or failed upload, inspect the device before retrying. An interrupted upload can leave a bounded temporary file or a lock needing operator review; errors never grant broader permissions or disable host verification.
+
+This phase does not create boot hooks or save firewall rules into firmware. Processes and rules may disappear on reboot or firmware updates. Automatic desired-state recovery is future work. Firmware updates remain outside these controls.
 
 ## Removal and rollback
 

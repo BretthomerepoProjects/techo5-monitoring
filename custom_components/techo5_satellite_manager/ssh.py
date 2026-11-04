@@ -1,7 +1,19 @@
-"""Strict host verification; no passwords, agents, user SSH config or forwarding."""
+"""Strict host verification and bounded stdin transfer, without SCP/SFTP."""
 import asyncio
 import asyncssh
 from .core import CheckError, MAX_OUTPUT, credential_paths, validate_host
+
+NODE_ERRORS = {
+    "root_required", "unsupported_firmware", "architecture_changed", "invalid_action",
+    "missing_tools", "unsafe_path", "binary_checksum_failed", "invalid_config",
+    "unmanaged_exporter", "external_supervisor", "legacy_iptables_required",
+    "configuration_changed_stop_first", "remote_busy", "invalid_payload_size",
+    "insufficient_storage", "upload_failed", "incomplete_upload", "not_installed",
+    "start_failed", "process_changed", "stop_failed", "unexpected_files",
+    "firewall_requires_review",
+    "exporter_port_in_use",
+    "cannot_check_listener", "firewall_backup_failed",
+}
 
 
 def load_material(config_dir, key_name):
@@ -10,32 +22,53 @@ def load_material(config_dir, key_name):
             asyncssh.import_known_hosts(hosts_path.read_text(encoding="utf-8")))
 
 
-async def probe(hass, settings, command):
+def connection_options(config_dir, settings):
+    key, hosts = load_material(config_dir, settings["key_name"])
+    # Options preparation may touch default paths: always run off the HA loop.
+    return asyncssh.SSHClientConnectionOptions(
+        config=None, port=settings["port"], username="root", client_keys=[key],
+        client_host_keys=[], known_hosts=hosts, agent_path=None, host_based_auth=False,
+        password_auth=False, kbdint_auth=False, agent_forwarding=False,
+        connect_timeout=8, login_timeout=8, encoding=None,
+    )
+
+
+async def probe(hass, settings, command, input_data=None):
+    if input_data is not None and len(input_data) > 32 * 1024 * 1024:
+        raise CheckError("invalid_payload_size")
     try:
-        key, hosts = await hass.async_add_executor_job(
-            load_material, hass.config.config_dir, settings["key_name"])
-        async with asyncssh.connect(
-            validate_host(settings["host"]), port=settings["port"], username="root",
-            client_keys=[key], known_hosts=hosts, config=None, agent_path=None,
-            password_auth=False, kbdint_auth=False, agent_forwarding=False,
-            connect_timeout=8, login_timeout=8, encoding="utf-8",
-        ) as connection:
+        options = await hass.async_add_executor_job(
+            connection_options, hass.config.config_dir, settings)
+        async with asyncssh.connect(validate_host(settings["host"]), options=options) as connection:
             async with connection.create_process(command, stderr=asyncssh.DEVNULL) as process:
-                # read(n) may return a partial chunk; accumulate with an absolute cap.
-                chunks = []
-                length = 0
-                while True:
-                    chunk = await process.stdout.read(min(1024, MAX_OUTPUT + 1 - length))
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                    length += len(chunk.encode())
-                    if length > MAX_OUTPUT:
-                        raise CheckError("output_limit")
-                await process.wait_closed()
-                if process.exit_status != 0:
-                    raise CheckError("probe_failed")
-                return "".join(chunks)
+                async def send():
+                    if input_data:
+                        for offset in range(0, len(input_data), 65536):
+                            process.stdin.write(input_data[offset:offset + 65536])
+                            await process.stdin.drain()
+                    process.stdin.write_eof()
+                writer = asyncio.create_task(send())
+                try:
+                    chunks = []
+                    length = 0
+                    while True:
+                        chunk = await process.stdout.read(min(1024, MAX_OUTPUT + 1 - length))
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                        length += len(chunk)
+                        if length > MAX_OUTPUT:
+                            raise CheckError("output_limit")
+                    await process.wait_closed()
+                    output = b"".join(chunks).decode("utf-8")
+                    if process.exit_status != 0:
+                        code = output.strip().removeprefix("node_error=")
+                        raise CheckError(code if code in NODE_ERRORS else "probe_failed")
+                    await writer
+                    return output
+                finally:
+                    writer.cancel()
+                    await asyncio.gather(writer, return_exceptions=True)
     except asyncio.CancelledError:
         raise
     except CheckError:
