@@ -1,5 +1,7 @@
 # TECHO5 Satellite Manager
 
+![Generic satellite network icon](custom_components/techo5_satellite_manager/brand/icon.png)
+
 A Home Assistant custom integration for inspecting TECHO5 Linux satellites through SSH.
 
 **Early prototype, version 0.1.2.** The current version offers a device-page **Check satellite** button and a status sensor. It makes no remote changes. Exporter deployment, log forwarding, start/stop controls and automatic recovery are being developed separately and are not available in this version. No stable release has been declared.
