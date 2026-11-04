@@ -36,10 +36,13 @@ def connection_options(config_dir, settings):
 async def probe(hass, settings, command, input_data=None):
     if input_data is not None and len(input_data) > 32 * 1024 * 1024:
         raise CheckError("invalid_payload_size")
+    phase = "credentials"
     try:
         options = await hass.async_add_executor_job(
             connection_options, hass.config.config_dir, settings)
+        phase = "connect"
         async with asyncssh.connect(validate_host(settings["host"]), options=options) as connection:
+            phase = "command"
             async with connection.create_process(command, stderr=asyncssh.DEVNULL) as process:
                 async def send():
                     if input_data:
@@ -47,7 +50,9 @@ async def probe(hass, settings, command, input_data=None):
                             process.stdin.write(input_data[offset:offset + 65536])
                             await process.stdin.drain()
                     process.stdin.write_eof()
-                writer = asyncio.create_task(send())
+                # Dropbear can finish a short read-only command before a scheduled
+                # writer runs. Do not send EOF on commands which need no input.
+                writer = asyncio.create_task(send()) if input_data is not None else None
                 try:
                     chunks = []
                     length = 0
@@ -64,11 +69,13 @@ async def probe(hass, settings, command, input_data=None):
                     if process.exit_status != 0:
                         code = output.strip().removeprefix("node_error=")
                         raise CheckError(code if code in NODE_ERRORS else "probe_failed")
-                    await writer
+                    if writer is not None:
+                        await writer
                     return output
                 finally:
-                    writer.cancel()
-                    await asyncio.gather(writer, return_exceptions=True)
+                    if writer is not None:
+                        writer.cancel()
+                        await asyncio.gather(writer, return_exceptions=True)
     except asyncio.CancelledError:
         raise
     except CheckError:
@@ -78,4 +85,18 @@ async def probe(hass, settings, command, input_data=None):
     except asyncssh.PermissionDenied as exc:
         raise CheckError("authentication_failed") from exc
     except (OSError, ValueError, asyncssh.Error) as exc:
-        raise CheckError("connection_or_credentials_failed") from exc
+        if phase == "credentials":
+            code = "credential_file_unavailable" if isinstance(exc, OSError) else "credential_files_invalid"
+        elif isinstance(exc, ConnectionRefusedError):
+            code = "ssh_connection_refused"
+        elif isinstance(exc, TimeoutError):
+            code = "ssh_connect_timeout"
+        elif type(exc).__name__ == "KeyExchangeFailed":
+            code = "ssh_negotiation_failed"
+        elif type(exc).__name__ == "ConnectionLost":
+            code = "ssh_connection_lost"
+        elif phase == "command":
+            code = "ssh_channel_failed"
+        else:
+            code = "ssh_network_failed"
+        raise CheckError(code) from exc

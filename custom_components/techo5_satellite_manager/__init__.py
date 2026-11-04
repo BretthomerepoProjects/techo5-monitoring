@@ -39,7 +39,9 @@ async def run_operation(hass, entry_id, operation):
     except CheckError as exc:
         runtime["result"] = {"node_state": "unreachable" if str(exc) in {
             "connection_or_credentials_failed", "timeout", "node_timeout_check_before_retry",
-            "host_key_rejected", "authentication_failed"} else "failed"}
+            "host_key_rejected", "authentication_failed", "ssh_connection_refused",
+            "ssh_connect_timeout", "ssh_negotiation_failed", "ssh_connection_lost",
+            "ssh_network_failed", "ssh_channel_failed"} else "failed"}
         runtime["status"] = str(exc)
         raise HomeAssistantError("Satellite operation failed: " + str(exc)) from None
     except asyncio.CancelledError:

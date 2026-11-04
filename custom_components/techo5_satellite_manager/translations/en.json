@@ -52,7 +52,15 @@
       "authentication_failed": "The device did not accept the configured SSH key.",
       "connection_or_credentials_failed": "The SSH connection or local credential files could not be used.",
       "probe_failed": "SSH connected but its test command failed.",
-      "host_key_probe_failed": "Could not read the SSH host key. This step does not push keys or change the SSH switch. Submit to retry the handshake."
+      "host_key_probe_failed": "Could not read the SSH host key. This step does not push keys or change the SSH switch. Submit to retry the handshake.",
+      "credential_file_unavailable": "HA cannot read the configured SSH key or known_hosts file. Verify the saved filename and existing HA access; do not replace keys or broaden permissions blindly.",
+      "credential_files_invalid": "The configured SSH credential files could not be parsed. Verify the existing files and key format.",
+      "ssh_connection_refused": "The satellite refused the SSH connection. Check its address, SSH port and existing SSH switch.",
+      "ssh_connect_timeout": "The SSH connection timed out. Check satellite reachability.",
+      "ssh_negotiation_failed": "SSH algorithm negotiation failed with this satellite firmware.",
+      "ssh_connection_lost": "The satellite closed the SSH connection unexpectedly.",
+      "ssh_channel_failed": "SSH connected, but its command channel failed. Check the satellite and retry the read-only check.",
+      "ssh_network_failed": "The SSH network connection could not be established."
     },
     "abort": {
       "already_configured": "This satellite is already configured",
@@ -118,7 +126,15 @@
       "connection_or_credentials_failed": "The SSH connection or local credential files could not be used.",
       "probe_failed": "SSH connected but its test command failed.",
       "host_key_probe_failed": "Could not read the SSH host key. This step does not push keys or change the SSH switch. Submit to retry the handshake.",
-      "invalid_node_settings": "Use a private IPv4 address different from the satellite, and a TCP port from 1024 to 65535 different from its SSH port."
+      "invalid_node_settings": "Use a private IPv4 address different from the satellite, and a TCP port from 1024 to 65535 different from its SSH port.",
+      "credential_file_unavailable": "HA cannot read the configured SSH key or known_hosts file. Verify the saved filename and existing HA access; do not replace keys or broaden permissions blindly.",
+      "credential_files_invalid": "The configured SSH credential files could not be parsed. Verify the existing files and key format.",
+      "ssh_connection_refused": "The satellite refused the SSH connection. Check its address, SSH port and existing SSH switch.",
+      "ssh_connect_timeout": "The SSH connection timed out. Check satellite reachability.",
+      "ssh_negotiation_failed": "SSH algorithm negotiation failed with this satellite firmware.",
+      "ssh_connection_lost": "The satellite closed the SSH connection unexpectedly.",
+      "ssh_channel_failed": "SSH connected, but its command channel failed. Check the satellite and retry the read-only check.",
+      "ssh_network_failed": "The SSH network connection could not be established."
     },
     "abort": {
       "already_configured": "This satellite is already configured",
