@@ -64,7 +64,10 @@ class Operations(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["node_state"], "stopped")
         self.assertEqual(len(calls), 2)
         self.assertIn(" -- inspect ", calls[1][0])
-        self.assertTrue(all(payload is None for _, payload in calls))
+        self.assertIsNone(calls[0][1])
+        self.assertIsInstance(calls[1][1], bytes)
+        self.assertLess(len(calls[1][0].encode()), 1024)
+        self.assertIn(b'if [ "$action" = inspect ]', calls[1][1])
 
     async def test_deploy_downloads_only_missing_payload_then_streams(self):
         calls = []
@@ -76,7 +79,8 @@ class Operations(unittest.IsolatedAsyncioTestCase):
         with patch.object(node, "download_payload", return_value=b"verified payload") as download:
             result = await node.NodeManager(transport, asyncio.to_thread).execute(SETTINGS, "deploy")
         download.assert_called_once_with("aarch64")
-        self.assertEqual(calls[-1][1], b"verified payload")
+        self.assertTrue(calls[-1][1].endswith(b"verified payload"))
+        self.assertGreater(len(calls[-1][1]), len(b"verified payload"))
         self.assertIn(" -- deploy ", calls[-1][0])
         self.assertEqual(result["node_state"], "running")
 

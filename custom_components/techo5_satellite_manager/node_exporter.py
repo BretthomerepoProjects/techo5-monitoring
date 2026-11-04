@@ -15,6 +15,17 @@ from .core import CheckError, PROBE, parse_probe, validate_host
 VERSION = "1.12.1"
 MAX_ARCHIVE = 16 * 1024 * 1024
 MAX_BINARY = 32 * 1024 * 1024
+MAX_SCRIPT = 32768
+# Keep the SSH exec request small. Some satellite SSH servers disconnect on a
+# multi-KiB exec command. Only the fixed, hash-verified local script is evaluated;
+# settings remain quoted positional arguments, never interpolated into its text.
+BOOTSTRAP = r'''set -eu
+case "$8" in ''|*[!0-9]*) exit 1;; esac
+[ "$8" -gt 0 ] && [ "$8" -le 32768 ] || exit 1
+script=$(dd bs=1 count="$8" 2>/dev/null)
+[ "$(printf '%s' "$script" | sha256sum | awk '{print $1}')" = "$9" ] || exit 1
+eval "$script"
+'''
 # Archive digests: https://prometheus.io/download.json (v1.12.1).
 # Executable digests are independently verified before upload and on the device.
 PAYLOADS = {
@@ -25,6 +36,20 @@ PAYLOADS = {
 }
 ACTIONS = ("inspect", "deploy", "start", "stop", "uninstall")
 STATES = {"not_installed", "stopped", "running", "failed", "unmanaged"}
+
+
+def script_request(script, action, host, collector, port, arch, digest, payload=None):
+    """Frame script then payload; byte-sized reads avoid BusyBox read-ahead loss."""
+    script_bytes = script.rstrip("\n").encode("utf-8")
+    if not 0 < len(script_bytes) <= MAX_SCRIPT:
+        raise CheckError("invalid_manager_script")
+    if payload is not None and len(payload) > MAX_BINARY:
+        raise CheckError("invalid_payload_size")
+    args = (action, host, collector, port, arch, digest, len(payload) if payload else 0,
+            len(script_bytes), hashlib.sha256(script_bytes).hexdigest())
+    command = "sh -c " + shlex.quote(BOOTSTRAP) + " -- " + " ".join(
+        shlex.quote(str(item)) for item in args)
+    return command, script_bytes + (payload or b"")
 
 
 def settings_for_node(settings):
@@ -130,12 +155,12 @@ class NodeManager:
                 script = await self.executor(
                     (Path(__file__).with_name("node_manager.sh")).read_text, "utf-8")
                 digest = PAYLOADS[arch][2]
-                def command(verb, size=0):
-                    return "sh -c " + shlex.quote(script) + " -- " + " ".join(
-                        shlex.quote(str(item)) for item in
-                        (verb, host, collector, port, arch, digest, size))
+                async def run(verb, payload=None):
+                    command, stream = script_request(
+                        script, verb, host, collector, port, arch, digest, payload)
+                    return await self.transport(settings, command, stream)
                 # Inspect first; downloads and mutations are explicit actions only.
-                state = parse_status(await self.transport(settings, command("inspect")))
+                state = parse_status(await run("inspect"))
                 if action == "inspect":
                     return state
                 if state["node_state"] in {"failed", "unmanaged"}:
@@ -143,7 +168,6 @@ class NodeManager:
                 payload = None
                 if action == "deploy" and state["node_state"] == "not_installed":
                     payload = await self.executor(download_payload, arch)
-                return parse_status(await self.transport(
-                    settings, command(action, len(payload) if payload else 0), payload))
+                return parse_status(await run(action, payload))
         except TimeoutError:
             raise CheckError("node_timeout_check_before_retry") from None

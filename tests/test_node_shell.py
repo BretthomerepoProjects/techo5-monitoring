@@ -1,5 +1,6 @@
 """Run the real manager in an isolated Linux temp tree with fake firewall tools."""
 import hashlib
+import importlib
 import json
 import os
 from pathlib import Path
@@ -7,9 +8,40 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import sys
+import types
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+package = types.ModuleType("framing_test_package")
+package.__path__ = [str(ROOT / "custom_components/techo5_satellite_manager")]
+sys.modules[package.__name__] = package
+node = importlib.import_module(package.__name__ + ".node_exporter")
+
+
+@unittest.skipUnless(os.name == "posix" and shutil.which("sh"), "Requires a local POSIX shell")
+class StdinFraming(unittest.TestCase):
+    def test_large_script_and_binary_payload_survive_small_exec_request(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "payload with spaces"
+            script = "#" + "x" * 12000 + '\nset -eu\ncat > "$2"\nprintf done\n'
+            payload = b'\n\x00' + bytes(range(256)) * 256
+            command, stream = node.script_request(script, "deploy", str(output), "unused", 9100,
+                                                  "aarch64", "0" * 64, payload)
+            self.assertLess(len(command.encode()), 1024)
+            result = subprocess.run(command, shell=True, input=stream, capture_output=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(output.read_bytes(), payload)
+            self.assertEqual(result.stdout, b"done")
+
+    def test_corrupted_script_never_executes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "must-not-exist"
+            command, stream = node.script_request('printf bad > "$2"\n', "inspect", str(output),
+                                                  "unused", 9100, "aarch64", "0" * 64)
+            result = subprocess.run(command, shell=True, input=b"X" + stream[1:], capture_output=True, timeout=5)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(output.exists())
 
 
 @unittest.skipUnless(os.name == "posix" and shutil.which("sh"),

@@ -34,7 +34,7 @@ def connection_options(config_dir, settings):
 
 
 async def probe(hass, settings, command, input_data=None):
-    if input_data is not None and len(input_data) > 32 * 1024 * 1024:
+    if input_data is not None and len(input_data) > 32 * 1024 * 1024 + 32768:
         raise CheckError("invalid_payload_size")
     phase = "credentials"
     try:
