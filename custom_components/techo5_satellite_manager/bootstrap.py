@@ -93,3 +93,21 @@ async def prepare(backend, public_keys, *, confirmed):
         await backend.push_keys(public_keys)
         await backend.wait_listening()
         return await backend.server_key()
+
+
+def _handshake_options():
+    # AsyncSSH can probe default host-based key/certificate files while building
+    # options. Disable those credentials and keep construction off HA's event loop.
+    return asyncssh.SSHClientConnectionOptions(
+        config=None, client_keys=[], client_host_keys=[], agent_path=None,
+        host_based_auth=False, public_key_auth=False,
+        password_auth=False, kbdint_auth=False, x509_trusted_certs=None)
+
+
+async def server_host_key(host, port, executor):
+    options = await executor(_handshake_options)
+    key = await asyncio.wait_for(asyncssh.get_server_host_key(
+        host, port=port, config=None, options=options), timeout=5)
+    if key is None:
+        raise BootstrapError('host_key_probe_failed')
+    return key

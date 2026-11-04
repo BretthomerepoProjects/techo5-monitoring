@@ -4,7 +4,7 @@
 
 A Home Assistant custom integration for inspecting TECHO5 Linux satellites through SSH.
 
-**Early prototype, version 0.1.3.** The current version offers a device-page **Check satellite** button and a status sensor. Optional setup can enable SSH and provision public keys through an existing encrypted ESPHome connection, with explicit confirmation. The manual check is read-only. Exporter deployment, log forwarding, start/stop controls and automatic recovery are being developed separately and are not available in this version. No stable release has been declared.
+**Early prototype, version 0.1.4.** The current version offers a device-page **Check satellite** button and a status sensor. Optional setup can enable SSH and provision public keys through an existing encrypted ESPHome connection, with explicit confirmation. The manual check is read-only. Exporter deployment, log forwarding, start/stop controls and automatic recovery are being developed separately and are not available in this version. No stable release has been declared.
 
 ## Current behavior
 
@@ -99,3 +99,7 @@ Licensing has not yet been selected. Public visibility is not a claim of a stabl
 ## Updating through Home Assistant
 
 Versioned GitHub releases are the update source for HACS. After a new release is published, HACS refreshes its metadata and updates its Home Assistant update entity. To refresh immediately, open this repository in HACS and use **Update information**, then open **Settings > System > Updates**. Installing integration code requires a Home Assistant restart before the new Python code runs. Publication does not automatically install or restart anything.
+
+### Recovering after a partially completed SSH setup
+
+If SSH was enabled and the key was sent but setup then failed, start Add Integration again and turn off **Prepare SSH through ESPHome before testing**. Setup now performs only a public host-key handshake, explicit first-use trust if needed, and the SSH connection test. It does not resend or replace keys or change the switch. Version 0.1.4 fixes blocking file access during AsyncSSH options construction by performing it in HA's executor and disabling unused host-based authentication keys.

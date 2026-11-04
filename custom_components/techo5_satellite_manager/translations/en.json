@@ -31,6 +31,10 @@
       "verify": {
         "title": "Test SSH connection",
         "description": "Testing SSH to {host} using the saved host key. Submit to retry the connection test only; public keys will not be pushed again."
+      },
+      "connect": {
+        "title": "Connect to prepared SSH",
+        "description": "Reading the public SSH host key from {host}. This step does not change the satellite. Submit to retry."
       }
     },
     "error": {
@@ -47,7 +51,8 @@
       "host_key_rejected": "SSH host verification failed. Verify the saved host key for this address.",
       "authentication_failed": "The device did not accept the configured SSH key.",
       "connection_or_credentials_failed": "The SSH connection or local credential files could not be used.",
-      "probe_failed": "SSH connected but its test command failed."
+      "probe_failed": "SSH connected but its test command failed.",
+      "host_key_probe_failed": "Could not read the SSH host key. This step does not push keys or change the SSH switch. Submit to retry the handshake."
     },
     "abort": {
       "already_configured": "This satellite is already configured",
@@ -76,6 +81,10 @@
       "verify": {
         "title": "Test SSH connection",
         "description": "Testing SSH to {host} using the saved host key. Submit to retry the connection test only; public keys will not be pushed again."
+      },
+      "connect": {
+        "title": "Connect to prepared SSH",
+        "description": "Reading the public SSH host key from {host}. This step does not change the satellite. Submit to retry."
       }
     },
     "error": {
@@ -92,7 +101,8 @@
       "host_key_rejected": "SSH host verification failed. Verify the saved host key for this address.",
       "authentication_failed": "The device did not accept the configured SSH key.",
       "connection_or_credentials_failed": "The SSH connection or local credential files could not be used.",
-      "probe_failed": "SSH connected but its test command failed."
+      "probe_failed": "SSH connected but its test command failed.",
+      "host_key_probe_failed": "Could not read the SSH host key. This step does not push keys or change the SSH switch. Submit to retry the handshake."
     },
     "abort": {
       "already_configured": "This satellite is already configured",

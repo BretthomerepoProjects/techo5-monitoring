@@ -5,7 +5,7 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 from .core import DOMAIN, validate_host, CheckError
-from .bootstrap import BootstrapError, public_identity, host_trust, prepare
+from .bootstrap import BootstrapError, public_identity, host_trust, prepare, server_host_key
 from .ha_bootstrap import HABootstrap, switch_choices
 from .ssh import probe
 
@@ -71,6 +71,23 @@ class BootstrapFlow:
                                       'fingerprint': self._server_key.get_fingerprint()},
             data_schema=vol.Schema({vol.Required('trust_host_key', default=False): bool}))
 
+    async def async_step_connect(self, user_input=None):
+        # Read-only recovery path for a device whose switch/key are already set.
+        errors = {}
+        try:
+            self._server_key = await server_host_key(
+                self._settings['host'], self._settings['port'], self.hass.async_add_executor_job)
+            trusted = await self.hass.async_add_executor_job(
+                host_trust, self.hass.config.config_dir, self._settings['host'],
+                self._settings['port'], self._server_key)
+            return await self.async_step_verify() if trusted else await self.async_step_trust()
+        except BootstrapError as exc:
+            errors['base'] = str(exc)
+        except Exception:
+            errors['base'] = 'host_key_probe_failed'
+        return self.async_show_form(step_id='connect', errors=errors,
+            description_placeholders={'host': self._settings['host']}, data_schema=vol.Schema({}))
+
     async def async_step_verify(self, user_input=None):
         errors = {}
         try:
@@ -110,7 +127,7 @@ class SatelliteConfigFlow(BootstrapFlow, config_entries.ConfigFlow, domain=DOMAI
                 self._abort_if_unique_id_configured()
                 if user_input.get('prepare_ssh', True):
                     return await self.async_step_bootstrap()
-                return await self.async_step_verify()
+                return await self.async_step_connect()
         return self.async_show_form(step_id='user', errors=errors, data_schema=vol.Schema({
             vol.Required('name', default='Satellite'): str,
             vol.Required('host'): str,

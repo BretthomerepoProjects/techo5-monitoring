@@ -4,6 +4,7 @@ import importlib
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from unittest.mock import patch
@@ -104,4 +105,22 @@ class SSHTests(unittest.IsolatedAsyncioTestCase):
         key = await asyncio.wait_for(asyncssh.get_server_host_key(
             "127.0.0.1", port=self.port, config=None, options=options), timeout=3)
         self.assertEqual(key, self.host_key.convert_to_public())
+        self.assertFalse(self.commands)
+
+    async def test_host_options_with_file_io_run_off_event_loop(self):
+        bootstrap = importlib.import_module(package.__name__ + ".bootstrap")
+        original = bootstrap._handshake_options
+        main_thread = threading.get_ident()
+        observed = []
+        sentinel = Path(self.temp.name) / "options-test.txt"
+        sentinel.write_text("synthetic")
+        def blocking_factory():
+            observed.append(threading.get_ident())
+            self.assertNotEqual(threading.get_ident(), main_thread)
+            sentinel.read_text()
+            return original()
+        with patch.object(bootstrap, "_handshake_options", side_effect=blocking_factory):
+            key = await bootstrap.server_host_key("127.0.0.1", self.port, asyncio.to_thread)
+        self.assertEqual(key, self.host_key.convert_to_public())
+        self.assertTrue(observed)
         self.assertFalse(self.commands)

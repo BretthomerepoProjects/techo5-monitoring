@@ -3,7 +3,7 @@ import asyncio
 import asyncssh
 from homeassistant.core import Context
 from homeassistant.helpers import entity_registry as er
-from .bootstrap import BootstrapError
+from .bootstrap import BootstrapError, server_host_key
 
 
 def target_for_switch(hass, entity_id, host):
@@ -73,12 +73,6 @@ class HABootstrap:
         raise BootstrapError('ssh_not_listening')
 
     async def server_key(self):
-        # Handshake only, no authentication or private key use until host trust is confirmed.
-        options = asyncssh.SSHClientConnectionOptions(
-            config=None, client_keys=[], agent_path=None,
-            password_auth=False, kbdint_auth=False)
-        key = await asyncio.wait_for(asyncssh.get_server_host_key(
-            self.settings['host'], port=self.settings['port'], config=None, options=options), timeout=5)
-        if key is None:
-            raise BootstrapError('ssh_not_listening')
-        return key
+        # Public handshake only; options/file handling runs in the executor.
+        return await server_host_key(self.settings['host'], self.settings['port'],
+                                     self.hass.async_add_executor_job)
