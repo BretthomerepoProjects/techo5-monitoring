@@ -13,6 +13,7 @@ NODE_ERRORS = {
     "firewall_requires_review",
     "exporter_port_in_use",
     "cannot_check_listener", "firewall_backup_failed",
+    "firewall_update_failed",
 }
 
 

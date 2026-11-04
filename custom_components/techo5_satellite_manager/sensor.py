@@ -33,7 +33,8 @@ class SatelliteStatus(SensorEntity):
     def extra_state_attributes(self):
         runtime = self.hass.data[DOMAIN]["entries"][self.entry.entry_id]
         return {"entry_id": self.entry.entry_id, **runtime["result"],
-                "deployment_enabled": bool(runtime["settings"].get("collector_host"))}
+                "deployment_enabled": bool(runtime["settings"].get("collector_host")),
+                **runtime["recovery"].attributes(runtime["settings"].get("node_recovery", False))}
 
 
 class NodeExporterStatus(SatelliteStatus):

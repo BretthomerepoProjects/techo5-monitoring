@@ -31,7 +31,7 @@ start_node:
 
 stop_node:
   name: Stop Node Exporter
-  description: Stop only this manager's process and remove only its exact firewall rules. No automatic recovery runs.
+  description: Stop only this manager's process and remove only its exact firewall rules. Automatic recovery is disabled before attempting Stop, even while unreachable.
   fields:
     entry_id:
       name: Satellite entry ID
@@ -41,10 +41,25 @@ stop_node:
 
 uninstall_node:
   name: Uninstall Node Exporter
-  description: Stop and remove only this manager's installation. Existing unmanaged installations are refused.
+  description: Stop and remove only this manager's installation. Automatic recovery is disabled first. Existing unmanaged installations are refused.
   fields:
     entry_id:
       name: Satellite entry ID
       required: true
       selector:
         text:
+
+set_node_recovery:
+  name: Set automatic Node Exporter recovery
+  description: Enable recovery immediately and on monitoring ticks, or disable future recovery without stopping a running process. Start/Deploy enable recovery; Stop/Uninstall disable it.
+  fields:
+    entry_id:
+      name: Satellite entry ID
+      required: true
+      selector:
+        text:
+    enabled:
+      name: Enable automatic recovery
+      required: true
+      selector:
+        boolean:

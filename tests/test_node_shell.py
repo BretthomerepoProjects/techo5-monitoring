@@ -75,7 +75,7 @@ import os, stat, sys
 info=os.stat(sys.argv[-1])
 uid=0 if info.st_uid == os.getuid() else info.st_uid
 mode=format(stat.S_IMODE(info.st_mode), "o")
-print({"%u": str(uid), "%a": mode, "%u:%a": str(uid) + ":" + mode}[sys.argv[2]])
+print({"%u": str(uid), "%a": mode, "%u:%a": str(uid) + ":" + mode, "%s": str(info.st_size)}[sys.argv[2]])
 ''')
         self.tool("uname", '#!/bin/sh\ncase "$1" in -m) echo aarch64;; -r) echo "${T5SM_KERNEL:-4.9.337-test}";; esac\n')
         self.tool("pidof", '''#!/usr/bin/python3
@@ -105,12 +105,13 @@ args=sys.argv[1:]
 if args == ["--version"]:
     print("iptables v1.8.7 (legacy)"); sys.exit(0)
 op, chain=args[:2]
+if os.environ.get("T5SM_NO_COMMENT") and "comment" in args: sys.exit(1)
 if op == "-S":
     print("-N " + chain)
     for rule in rules: print("-A " + chain + " " + " ".join(rule))
     sys.exit(0)
 if op == "-I":
-    if os.environ.get("T5SM_FAIL_ALLOW") and "t5sm-node-allow" in args: sys.exit(1)
+    if os.environ.get("T5SM_FAIL_ALLOW") and args[-1] == "ACCEPT": sys.exit(1)
     rules.insert(int(args[2])-1, args[3:])
 elif op == "-C":
     sys.exit(0 if args[2:] in rules else 1)
@@ -215,3 +216,62 @@ path.write_text(json.dumps(rules))
             self.assertIn("exporter_port_in_use", self.call("deploy", self.payload,
                 port=listener.getsockname()[1], expect=1))
         self.assertEqual(json.loads(self.rules.read_text()), [["unrelated-existing-rule"]])
+
+
+    def test_corrupt_managed_payload_is_backed_up_and_repaired(self):
+        self.call("deploy", self.payload)
+        self.call("stop")
+        (self.install / "node_exporter").write_bytes(b"synthetic corrupt payload")
+        self.assertIn("node_state=invalid", self.call("inspect"))
+        self.call("deploy", self.payload)
+        self.assertEqual((self.install / "node_exporter.previous").read_bytes(), b"synthetic corrupt payload")
+        self.assertEqual((self.install / "node_exporter").read_bytes(), self.payload)
+        self.call("uninstall")
+        self.assertFalse(self.install.exists())
+
+    def test_corrupt_payload_with_missing_ownership_manifest_is_not_adopted(self):
+        self.call("deploy", self.payload)
+        self.call("stop")
+        (self.install / "node_exporter").write_bytes(b"unknown payload")
+        (self.install / "config").unlink()
+        self.assertIn("invalid_config", self.call("deploy", self.payload, expect=1))
+        self.assertEqual((self.install / "node_exporter").read_bytes(), b"unknown payload")
+
+
+    def test_kernel_without_comment_match_uses_owned_plain_rules(self):
+        self.env["T5SM_NO_COMMENT"] = "1"
+        self.call("deploy", self.payload)
+        self.assertEqual((self.install / "firewall_mode").read_text(), "plain\n")
+        self.assertIn("node_firewall=restricted", self.call("inspect"))
+        self.assertTrue(all("comment" not in rule for rule in json.loads(self.rules.read_text())))
+        self.call("uninstall")
+        self.assertEqual(json.loads(self.rules.read_text()), [["unrelated-existing-rule"]])
+
+    def test_unclaimed_plain_rule_is_not_adopted_or_deleted(self):
+        existing = ["-s", "10.77.0.20/32", "-d", "10.77.0.10/32", "-p", "tcp", "--dport", "9100", "-j", "ACCEPT"]
+        self.rules.write_text(json.dumps([existing, ["unrelated-existing-rule"]]))
+        self.assertIn("firewall_requires_review", self.call("deploy", self.payload, expect=1))
+        self.assertFalse((self.install / "firewall_mode").exists())
+        self.assertEqual(json.loads(self.rules.read_text()), [existing, ["unrelated-existing-rule"]])
+
+    def test_old_comment_rules_remain_manageable_during_upgrade(self):
+        self.call("deploy", self.payload)
+        self.call("stop")
+        (self.install / "firewall_mode").unlink()
+        allow = ["-s", "10.77.0.20/32", "-d", "10.77.0.10/32", "-p", "tcp", "--dport", "9100", "-m", "comment", "--comment", "t5sm-node-allow", "-j", "ACCEPT"]
+        deny = ["-d", "10.77.0.10/32", "-p", "tcp", "--dport", "9100", "-m", "comment", "--comment", "t5sm-node-deny", "-j", "DROP"]
+        self.rules.write_text(json.dumps([allow, deny, ["unrelated-existing-rule"]]))
+        self.assertIn("node_firewall=restricted", self.call("inspect"))
+        self.call("start")
+        self.assertEqual((self.install / "firewall_mode").read_text(), "comment\n")
+        self.call("uninstall")
+        self.assertEqual(json.loads(self.rules.read_text()), [["unrelated-existing-rule"]])
+
+    def test_endpoint_change_refuses_unclaimed_new_plain_rule(self):
+        self.call("deploy", self.payload)
+        self.call("stop")
+        existing = ["-s", "10.77.0.30/32", "-d", "10.77.0.10/32", "-p", "tcp", "--dport", "9100", "-j", "ACCEPT"]
+        self.rules.write_text(json.dumps([existing, ["unrelated-existing-rule"]]))
+        self.assertIn("firewall_requires_review", self.call("deploy", collector="10.77.0.30", expect=1))
+        self.assertIn("10.77.0.20", (self.install / "config").read_text())
+        self.assertEqual(json.loads(self.rules.read_text()), [existing, ["unrelated-existing-rule"]])

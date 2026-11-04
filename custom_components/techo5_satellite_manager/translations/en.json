@@ -103,7 +103,7 @@
       },
       "node": {
         "title": "Node Exporter metrics",
-        "description": "Enter the IPv4 source address used by your Prometheus server. Deploy and start runs only from the device button. Only this source will be allowed to the exporter port. Stop the exporter before changing these settings; deploy again afterward. Monitoring checks are read-only every 60 seconds. These settings do not configure Prometheus scraping.",
+        "description": "Enter the IPv4 source address used by your Prometheus server. Only this source is allowed to the exporter port. Stop before changing these settings, then Deploy again. The device recovery switch controls automatic starts/repairs; Start/Deploy enable it and Stop/Uninstall disable it. Manual Check is always read-only. Prometheus targets are configured separately.",
         "data": {
           "collector_host": "Prometheus source IPv4 address",
           "exporter_port": "Node Exporter TCP port"

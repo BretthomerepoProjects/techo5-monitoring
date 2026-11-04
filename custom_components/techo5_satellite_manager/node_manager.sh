@@ -40,7 +40,7 @@ if [ "$action" != inspect ]; then
   trap cleanup EXIT
   trap 'exit 1' HUP INT TERM
 fi
-for file in node_exporter config pid firewall.before payload.tmp; do
+for file in node_exporter node_exporter.previous config pid firewall.before firewall_mode payload.tmp; do
   [ ! -L "$ROOT/$file" ] || fail unsafe_path
   if [ -e "$ROOT/$file" ]; then
     [ -f "$ROOT/$file" ] && [ "$(stat -c '%u' "$ROOT/$file")" = 0 ] || fail unsafe_path
@@ -50,8 +50,8 @@ done
 bin=$ROOT/node_exporter
 installed=no
 if [ -e "$bin" ]; then
-  [ "$(sha256sum "$bin" | awk '{print $1}')" = "$expected" ] || fail binary_checksum_failed
-  installed=yes
+  if [ "$(sha256sum "$bin" | awk '{print $1}')" = "$expected" ] && [ -x "$bin" ]; then installed=yes
+  else installed=invalid; fi
 fi
 saved_host=$host saved_collector=$collector saved_port=$port
 if [ -f "$ROOT/config" ]; then
@@ -63,7 +63,7 @@ if [ -f "$ROOT/config" ]; then
   done
   case "$saved_port" in ''|*[!0-9]*) fail invalid_config;; esac
   [ "$saved_port" -ge 1024 ] && [ "$saved_port" -le 65535 ] || fail invalid_config
-elif [ "$installed" = yes ]; then fail invalid_config
+elif [ "$installed" != no ]; then fail invalid_config
 fi
 IPT=
 for candidate in iptables-legacy iptables; do
@@ -74,24 +74,51 @@ for candidate in iptables-legacy iptables; do
 done
 # Host-bound metrics always traverse INPUT. Insert before any firmware jump/ACCEPT.
 chain=INPUT
+firewall_mode=comment
 rule() {
   kind=$1 op=$2
   shift 2
   if [ "$kind" = allow ]; then
-    "$IPT" "$op" "$chain" "$@" -s "$saved_collector/32" -d "$saved_host/32" -p tcp --dport "$saved_port" -m comment --comment t5sm-node-allow -j ACCEPT
+    if [ "$firewall_mode" = comment ]; then
+      "$IPT" "$op" "$chain" "$@" -s "$saved_collector/32" -d "$saved_host/32" -p tcp --dport "$saved_port" -m comment --comment t5sm-node-allow -j ACCEPT
+    else
+      "$IPT" "$op" "$chain" "$@" -s "$saved_collector/32" -d "$saved_host/32" -p tcp --dport "$saved_port" -j ACCEPT
+    fi
   else
-    "$IPT" "$op" "$chain" "$@" -d "$saved_host/32" -p tcp --dport "$saved_port" -m comment --comment t5sm-node-deny -j DROP
+    if [ "$firewall_mode" = comment ]; then
+      "$IPT" "$op" "$chain" "$@" -d "$saved_host/32" -p tcp --dport "$saved_port" -m comment --comment t5sm-node-deny -j DROP
+    else
+      "$IPT" "$op" "$chain" "$@" -d "$saved_host/32" -p tcp --dport "$saved_port" -j DROP
+    fi
   fi
 }
+# Old installations used comment-tagged rules. Preserve their ownership, but new
+# rules use a protected manifest so ARMv7 kernels need no xt_comment support.
+claimed=no
+if [ -f "$ROOT/firewall_mode" ]; then
+  read firewall_mode < "$ROOT/firewall_mode"
+  case "$firewall_mode" in plain|comment) ;; *) fail invalid_config;; esac
+  claimed=yes
+elif [ -n "$IPT" ] && { rule allow -C 2>/dev/null || rule deny -C 2>/dev/null; }; then
+  claimed=yes
+else
+  firewall_mode=plain
+fi
 firewall=absent
 if [ -n "$IPT" ]; then
   allow=no deny=no
   rule allow -C 2>/dev/null && allow=yes
   rule deny -C 2>/dev/null && deny=yes
   if [ "$allow:$deny" = yes:yes ]; then
-    first=$("$IPT" -S "$chain" | awk 'NR==2 {print}' | tr -d '"')
-    second=$("$IPT" -S "$chain" | awk 'NR==3 {print}' | tr -d '"')
-    case "$first:$second" in *'--comment t5sm-node-allow'*:*'--comment t5sm-node-deny'*) firewall=restricted;; *) firewall=partial;; esac
+    first=$("$IPT" -S "$chain" | awk 'NR==2 {gsub(/ -m tcp /," "); print}' | tr -d '"')
+    second=$("$IPT" -S "$chain" | awk 'NR==3 {gsub(/ -m tcp /," "); print}' | tr -d '"')
+    if [ "$firewall_mode" = comment ]; then
+      case "$first:$second" in *'--comment t5sm-node-allow'*:*'--comment t5sm-node-deny'*) firewall=restricted;; *) firewall=partial;; esac
+    elif [ "$claimed" = yes ] &&
+      [ "$first" = "-A $chain -s $saved_collector/32 -d $saved_host/32 -p tcp --dport $saved_port -j ACCEPT" ] &&
+      [ "$second" = "-A $chain -d $saved_host/32 -p tcp --dport $saved_port -j DROP" ]; then
+      firewall=restricted
+    else firewall=partial; fi
   elif [ "$allow:$deny" != no:no ]; then firewall=partial; fi
 fi
 valid_pid() {
@@ -106,7 +133,7 @@ valid_pid() {
 owned=no
 valid_pid && owned=yes
 state=not_installed
-[ "$installed" = no ] || state=stopped
+case "$installed" in yes) state=stopped;; invalid) state=invalid;; esac
 [ "$owned" = no ] || state=running
 # Never kill/adopt an existing pilot, or fight firmware/init supervision.
 for p in $(pidof node_exporter 2>/dev/null || true); do
@@ -117,6 +144,7 @@ if [ "$action" = inspect ]; then
   exit 0
 fi
 [ "$state" != unmanaged ] || fail unmanaged_exporter
+[ "$claimed:$firewall" != no:partial ] || fail firewall_requires_review
 if [ -r /etc/inittab ] && grep -q '^[^#].*node[-_]exporter' /etc/inittab; then fail external_supervisor; fi
 if [ -d /etc/init.d ]; then
   for file in /etc/init.d/*node*export*; do [ ! -e "$file" ] || fail external_supervisor; done
@@ -140,13 +168,19 @@ case "$action" in deploy|start)
   fi
   ;;
 esac
+if [ "$reconfigure:$firewall_mode" = yes:plain ]; then
+  original_host=$saved_host original_collector=$saved_collector original_port=$saved_port
+  saved_host=$host saved_collector=$collector saved_port=$port
+  if rule allow -C 2>/dev/null || rule deny -C 2>/dev/null; then fail firewall_requires_review; fi
+  saved_host=$original_host saved_collector=$original_collector saved_port=$original_port
+fi
 # Bounded on-device rollback evidence: latest pre-change chain snapshot with UTC header.
 (ulimit -f 512; date -u '+# %Y-%m-%dT%H:%M:%SZ'; "$IPT" -S "$chain") > "$ROOT/firewall.before" || fail firewall_backup_failed
 if [ "$reconfigure" = yes ]; then
   saved_host=$host saved_collector=$collector saved_port=$port
   printf '%s %s %s %s\n' "$host" "$collector" "$port" "$expected" > "$ROOT/config"
 fi
-if [ "$action" = deploy ] && [ "$installed" = no ]; then
+if [ "$action" = deploy ] && [ "$installed" != yes ]; then
   [ "$size" -gt 0 ] && [ "$size" -le 33554432 ] || fail invalid_payload_size
   free=$(df -Pk /data | awk 'END {print $4}')
   [ "$free" -ge 65536 ] || fail insufficient_storage
@@ -155,6 +189,10 @@ if [ "$action" = deploy ] && [ "$installed" = no ]; then
   [ "$(wc -c < "$ROOT/payload.tmp" | tr -d ' ')" = "$size" ] || fail incomplete_upload
   [ "$(sha256sum "$ROOT/payload.tmp" | awk '{print $1}')" = "$expected" ] || fail binary_checksum_failed
   chmod 700 "$ROOT/payload.tmp"
+  if [ "$installed" = invalid ]; then
+    [ "$(stat -c '%s' "$bin")" -le 33554432 ] || fail invalid_payload_size
+    mv "$bin" "$ROOT/node_exporter.previous"
+  fi
   mv "$ROOT/payload.tmp" "$bin"
   printf '%s %s %s %s\n' "$host" "$collector" "$port" "$expected" > "$ROOT/config"
   installed=yes
@@ -163,9 +201,10 @@ case "$action" in
   deploy|start)
     [ "$installed" = yes ] || fail not_installed
     [ "$firewall" != partial ] || fail firewall_requires_review
+    printf '%s\n' "$firewall_mode" > "$ROOT/firewall_mode"
     # Insert before firmware DROP. Deny all other sources to this exact endpoint.
-    if ! rule deny -C 2>/dev/null; then rule deny -I 1; added_deny=yes; fi
-    if ! rule allow -C 2>/dev/null; then rule allow -I 1; added_allow=yes; fi
+    if ! rule deny -C 2>/dev/null; then rule deny -I 1 || fail firewall_update_failed; added_deny=yes; fi
+    if ! rule allow -C 2>/dev/null; then rule allow -I 1 || fail firewall_update_failed; added_allow=yes; fi
     if [ "$owned" = no ]; then
       setsid "$bin" --web.listen-address="$host:$port" --collector.disable-defaults \
         --collector.cpu --collector.meminfo --collector.loadavg --collector.netdev \
@@ -189,14 +228,14 @@ case "$action" in
       while valid_pid && [ "$n" -lt 8 ]; do sleep 1; n=$((n+1)); done
       if valid_pid; then fail stop_failed; fi
     fi
-    if rule allow -C 2>/dev/null; then rule allow -D; fi
-    if rule deny -C 2>/dev/null; then rule deny -D; fi
+    if rule allow -C 2>/dev/null; then rule allow -D || fail firewall_update_failed; fi
+    if rule deny -C 2>/dev/null; then rule deny -D || fail firewall_update_failed; fi
     rm -f "$ROOT/pid"
     state=not_installed
-    [ "$installed" = no ] || state=stopped
+    case "$installed" in yes) state=stopped;; invalid) state=invalid;; esac
     firewall=absent
     if [ "$action" = uninstall ]; then
-      rm -f "$bin" "$ROOT/config" "$ROOT/firewall.before"
+      rm -f "$bin" "$ROOT/node_exporter.previous" "$ROOT/config" "$ROOT/firewall.before" "$ROOT/firewall_mode"
       rmdir "$ROOT" || fail unexpected_files
       state=not_installed
     fi

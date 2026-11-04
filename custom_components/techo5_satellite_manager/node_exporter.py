@@ -35,7 +35,7 @@ PAYLOADS = {
                 "737591cd29f1aad5f1f53fe61d19ea54d841c27c101446619f7b026a682b85b8"),
 }
 ACTIONS = ("inspect", "deploy", "start", "stop", "uninstall")
-STATES = {"not_installed", "stopped", "running", "failed", "unmanaged"}
+STATES = {"not_installed", "stopped", "running", "invalid", "failed", "unmanaged"}
 
 
 def script_request(script, action, host, collector, port, arch, digest, payload=None):
@@ -165,8 +165,10 @@ class NodeManager:
                     return state
                 if state["node_state"] in {"failed", "unmanaged"}:
                     raise CheckError("node_requires_review")
+                if state["node_state"] == "invalid" and action == "start":
+                    raise CheckError("node_requires_redeploy")
                 payload = None
-                if action == "deploy" and state["node_state"] == "not_installed":
+                if action == "deploy" and state["node_state"] in {"not_installed", "invalid"}:
                     payload = await self.executor(download_payload, arch)
                 return parse_status(await run(action, payload))
         except TimeoutError:
