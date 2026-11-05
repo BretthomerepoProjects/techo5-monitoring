@@ -12,7 +12,7 @@ from .recovery import RecoveryPolicy
 
 VERSION = "0.1.0"
 RELEASE = "0.4.0"
-PAYLOADS = {'armv7l': ('t5-log-stream-linux-armv7', 'f709fc59796ee64911ddebbdbd6f75e6e8b339821b91b43e1d8602b1d3217e89'), 'aarch64': ('t5-log-stream-linux-arm64', '9ff302211f0bad6f2b3c8c05d06baab9eebc0d768e024159fd37d466170309fc')}
+PAYLOADS = {'armv7l': ('t5-log-stream-linux-armv7', 'de8ca789340f7ef0c7f1128c2917f0619b2e6d58dfd41195252c7a0ccb82b485'), 'aarch64': ('t5-log-stream-linux-arm64', '7e5790102e7952039cfece8bc660e392f0f5f3ae6c0a516a66bb991be2086559')}
 COUNTERS = {"connected", "written", "dropped", "truncated", "kernel_lost",
             "kernel_records", "read_errors", "files", "kernel_open", "queue", "uptime", "cpu_us", "file_gaps"}
 

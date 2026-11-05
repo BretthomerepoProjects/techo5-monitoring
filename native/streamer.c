@@ -187,7 +187,7 @@ int main(int argc,char **argv) {
         connect_start();
         struct pollfd p[2]={{kfd,POLLIN,0},{sock,(short)(POLLIN|((connecting||qcount)?POLLOUT:0)),0}};
         poll(p,2,250);
-        if(p[0].revents&POLLIN)kernel_read();
+        if(p[0].revents&(POLLIN|POLLERR))kernel_read();
         if(sock>=0 && (p[1].revents&(POLLERR|POLLHUP|POLLNVAL)))disconnect();
         if(sock>=0 && connecting && (p[1].revents&POLLOUT)) {
             int err=0;socklen_t len=sizeof err;
