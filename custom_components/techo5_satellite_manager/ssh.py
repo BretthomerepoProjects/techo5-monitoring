@@ -4,6 +4,7 @@ import asyncssh
 from .core import CheckError, MAX_OUTPUT, credential_paths, validate_host
 
 NODE_ERRORS = {
+    "unmanaged_streamer", "stream_requires_redeploy", "kernel_log_unavailable", "application_log_unavailable",
     "root_required", "unsupported_firmware", "architecture_changed", "invalid_action",
     "missing_tools", "unsafe_path", "binary_checksum_failed", "invalid_config",
     "unmanaged_exporter", "external_supervisor", "legacy_iptables_required",

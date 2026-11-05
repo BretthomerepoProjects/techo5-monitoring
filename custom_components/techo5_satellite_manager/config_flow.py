@@ -9,6 +9,7 @@ from .bootstrap import BootstrapError, public_identity, host_trust, prepare, ser
 from .ha_bootstrap import HABootstrap, switch_choices
 from .ssh import probe
 from .node_exporter import settings_for_node
+from .streamer import settings_for_stream
 
 
 class BootstrapFlow:
@@ -143,7 +144,7 @@ class SatelliteConfigFlow(BootstrapFlow, config_entries.ConfigFlow, domain=DOMAI
 
 class SatelliteOptionsFlow(BootstrapFlow, config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
-        return self.async_show_menu(step_id="init", menu_options=["node", "ssh"])
+        return self.async_show_menu(step_id="init", menu_options=["node", "stream", "ssh"])
 
     async def async_step_node(self, user_input=None):
         errors = {}
@@ -163,6 +164,25 @@ class SatelliteOptionsFlow(BootstrapFlow, config_entries.OptionsFlow):
                 vol.Required("exporter_port", default=saved.get("exporter_port", 9100)):
                     vol.All(vol.Coerce(int), vol.Range(min=1024, max=65535)),
             }))
+
+    async def async_step_stream(self, user_input=None):
+        errors = {}
+        saved = {**self.config_entry.data, **self.config_entry.options}
+        if user_input is not None:
+            try:
+                _, collector, port = settings_for_stream({**saved, **user_input})
+                if saved.get("stream_recovery", False) and any(saved.get(k) != user_input.get(k) for k in ("log_host", "log_port")):
+                    raise ValueError("Stop first")
+            except (ValueError, KeyError): errors["base"] = "invalid_stream_settings"
+            else:
+                return self.async_create_entry(title="", data={**self.config_entry.options,
+                    "log_host": collector, "log_port": port, "log_consent": True})
+        return self.async_show_form(step_id="stream", errors=errors, data_schema=vol.Schema({
+            vol.Required("log_host", default=saved.get("log_host", "")): str,
+            vol.Required("log_port", default=saved.get("log_port", 1514)):
+                vol.All(vol.Coerce(int), vol.Range(min=1024, max=65535)),
+            vol.Required("log_consent", default=False): bool,
+        }))
 
     async def async_step_ssh(self, user_input=None):
         self._settings = dict(self.config_entry.data)

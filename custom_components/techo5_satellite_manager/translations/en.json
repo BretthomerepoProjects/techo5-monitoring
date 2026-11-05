@@ -98,7 +98,8 @@
         "title": "Satellite settings",
         "menu_options": {
           "node": "Configure Node Exporter",
-          "ssh": "Prepare SSH and test connection"
+          "ssh": "Prepare SSH and test connection",
+          "stream": "Configure log streamer"
         }
       },
       "node": {
@@ -107,6 +108,15 @@
         "data": {
           "collector_host": "Prometheus source IPv4 address",
           "exporter_port": "Node Exporter TCP port"
+        }
+      },
+      "stream": {
+        "title": "Configure log streamer",
+        "description": "Forward kernel and existing system/application log files over plaintext TCP syslog. Logs can contain personal text and identifiers. Keep the receiver on a trusted network. No flash spool: outages and reboots can lose messages. Stop the streamer before changing destination. Saving does not deploy it.",
+        "data": {
+          "log_host": "Log collector private IPv4 address",
+          "log_port": "TCP syslog port",
+          "log_consent": "I understand that existing log contents will be sent to this collector"
         }
       }
     },
@@ -134,7 +144,8 @@
       "ssh_negotiation_failed": "SSH algorithm negotiation failed with this satellite firmware.",
       "ssh_connection_lost": "The satellite closed the SSH connection unexpectedly.",
       "ssh_channel_failed": "SSH connected, but its command channel failed. Check the satellite and retry the read-only check.",
-      "ssh_network_failed": "The SSH network connection could not be established."
+      "ssh_network_failed": "The SSH network connection could not be established.",
+      "invalid_stream_settings": "Enter a private collector address and valid port, confirm forwarding, and stop recovery before changing destination."
     },
     "abort": {
       "already_configured": "This satellite is already configured",

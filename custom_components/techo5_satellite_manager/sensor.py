@@ -5,7 +5,7 @@ from .core import DOMAIN
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([SatelliteStatus(entry), NodeExporterStatus(entry)])
+    async_add_entities([SatelliteStatus(entry), NodeExporterStatus(entry), LogStreamerStatus(entry)])
 
 
 class SatelliteStatus(SensorEntity):
@@ -32,7 +32,9 @@ class SatelliteStatus(SensorEntity):
     @property
     def extra_state_attributes(self):
         runtime = self.hass.data[DOMAIN]["entries"][self.entry.entry_id]
-        return {"entry_id": self.entry.entry_id, **runtime["result"],
+        return {"entry_id": self.entry.entry_id, **runtime["result"], **runtime["stream_result"],
+                "stream_error": runtime["stream_error"],
+                **runtime["stream_recovery"].attributes(runtime["settings"].get("stream_recovery", False)),
                 "deployment_enabled": bool(runtime["settings"].get("collector_host")),
                 **runtime["recovery"].attributes(runtime["settings"].get("node_recovery", False))}
 
@@ -49,3 +51,16 @@ class NodeExporterStatus(SatelliteStatus):
     def native_value(self):
         runtime = self.hass.data[DOMAIN]["entries"][self.entry.entry_id]
         return runtime["result"].get("node_state", "unknown")
+
+
+class LogStreamerStatus(SatelliteStatus):
+    _attr_name = "Log streamer"
+    _attr_icon = "mdi:text-box-search"
+
+    def __init__(self, entry):
+        super().__init__(entry)
+        self._attr_unique_id = entry.entry_id + "_log_streamer"
+
+    @property
+    def native_value(self):
+        return self.hass.data[DOMAIN]["entries"][self.entry.entry_id]["stream_result"].get("stream_state", "unknown")

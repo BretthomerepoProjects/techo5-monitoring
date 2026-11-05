@@ -4,7 +4,7 @@
 
 A Home Assistant custom integration for inspecting TECHO5 Linux satellites and explicitly managing native Node Exporter metrics through SSH.
 
-**Experimental version 0.3.0.** Device-page controls can deploy and start, start, stop, uninstall, and check Node Exporter. SSH bootstrap remains available through Configure. This release requires device acceptance testing; no stable release has been declared. Automatic recovery is opt-in per satellite. Syslog forwarding is not implemented.
+**Experimental version 0.4.0.** Device-page controls can deploy and start, start, stop, uninstall, and check Node Exporter. SSH bootstrap remains available through Configure. This release requires device acceptance testing; no stable release has been declared. Automatic recovery is opt-in per satellite. Optional kernel and file-log forwarding is available through a separately managed native log streamer.
 
 Version 0.2.1 fixes a read-only SSH command race: no stdin EOF is sent when there is no upload. It also distinguishes credential-file, network, negotiation and command-channel failures using sanitized error codes.
 
@@ -143,3 +143,7 @@ If SSH was enabled and the key was sent but setup then failed, start Add Integra
 ## Grafana dashboard and panel JSON
 
 The optional [Grafana files and setup guide](grafana/README.md) include a complete fleet dashboard and six standalone panel JSON files for existing dashboards. They use only built-in Grafana panels and the built-in Prometheus data source; no additional plugins are required. Prometheus scrape configuration is supplied as a template. These files display system metrics only; logging is outside their scope. HACS installs the integration, not Grafana resources.
+
+## Optional log streamer
+
+See [log streamer setup, sources and limits](docs/log-streamer.md). It uses one small static process on each satellite and the existing SSH connection for management. Logging has its own destination, controls, status and opt-in recovery. No firmware rebuild, boot-hook changes or new inbound network listener are required. The SSH key-generation feature is not included in this update.

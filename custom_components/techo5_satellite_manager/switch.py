@@ -6,7 +6,7 @@ from .core import DOMAIN
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([NodeRecoverySwitch(entry)])
+    async_add_entities([NodeRecoverySwitch(entry), StreamRecoverySwitch(entry)])
 
 
 class NodeRecoverySwitch(SwitchEntity):
@@ -35,4 +35,24 @@ class NodeRecoverySwitch(SwitchEntity):
 
     async def async_turn_off(self, **kwargs):
         await self.hass.services.async_call(DOMAIN, "set_node_recovery",
+            {"entry_id": self.entry.entry_id, "enabled": False}, blocking=True, context=self._context)
+
+
+class StreamRecoverySwitch(NodeRecoverySwitch):
+    _attr_name = "Automatic log streamer recovery"
+
+    def __init__(self, entry):
+        super().__init__(entry)
+        self._attr_unique_id = entry.entry_id + "_stream_recovery"
+
+    @property
+    def is_on(self):
+        return self.hass.data[DOMAIN]["entries"][self.entry.entry_id]["settings"].get("stream_recovery", False)
+
+    async def async_turn_on(self, **kwargs):
+        await self.hass.services.async_call(DOMAIN, "set_stream_recovery",
+            {"entry_id": self.entry.entry_id, "enabled": True}, blocking=True, context=self._context)
+
+    async def async_turn_off(self, **kwargs):
+        await self.hass.services.async_call(DOMAIN, "set_stream_recovery",
             {"entry_id": self.entry.entry_id, "enabled": False}, blocking=True, context=self._context)

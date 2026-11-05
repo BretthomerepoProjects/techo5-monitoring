@@ -63,3 +63,51 @@ set_node_recovery:
       required: true
       selector:
         boolean:
+
+deploy_stream:
+  name: Deploy log streamer
+  description: Explicitly deploy the managed log streamer.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+
+start_stream:
+  name: Start log streamer
+  description: Explicitly start the managed log streamer.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+
+stop_stream:
+  name: Stop log streamer
+  description: Explicitly stop the managed log streamer.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+
+uninstall_stream:
+  name: Uninstall log streamer
+  description: Explicitly uninstall the managed log streamer.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+
+set_stream_recovery:
+  name: Set automatic log streamer recovery
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    enabled:
+      required: true
+      selector:
+        boolean:

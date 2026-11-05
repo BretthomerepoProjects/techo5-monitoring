@@ -4,6 +4,10 @@ from homeassistant.const import EntityCategory
 from .core import DOMAIN
 
 CONTROLS = (
+    ("deploy_stream", "Deploy and start log streamer", "mdi:download-network"),
+    ("start_stream", "Start log streamer", "mdi:play"),
+    ("stop_stream", "Stop log streamer", "mdi:stop"),
+    ("uninstall_stream", "Uninstall log streamer", "mdi:delete"),
     ("check", "Check satellite", "mdi:check-network"),
     ("deploy_node", "Deploy and start Node Exporter", "mdi:download-network"),
     ("start_node", "Start Node Exporter", "mdi:play"),

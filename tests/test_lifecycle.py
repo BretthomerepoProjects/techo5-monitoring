@@ -255,3 +255,44 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.entry.options["node_recovery"])
         self.assertTrue(recovering.cancelled())
         self.assertTrue(stopping.cancelled())
+
+    async def test_stream_only_monitor_and_readonly_check(self):
+        self.entry.options = {"log_host": "10.77.0.20", "log_port": 1514, "log_consent": True, "stream_recovery": True}
+        await self.adapter.async_setup_entry(self.hass, self.entry)
+        runtime=self.runtime();runtime["checker"].check=AsyncMock(return_value={})
+        runtime["stream"].execute=AsyncMock(return_value={"stream_state":"stopped"})
+        await self.adapter.run_operation(self.hass,"synthetic","check")
+        self.assertEqual([x.args[1] for x in runtime["stream"].execute.await_args_list],["inspect"])
+        self.assertEqual(len(self.timers),1)
+
+    async def test_stream_failure_does_not_prevent_node_monitor(self):
+        self.entry.options.update(log_host="10.77.0.20",log_consent=True)
+        await self.adapter.async_setup_entry(self.hass,self.entry)
+        runtime=self.runtime();runtime["checker"].check=AsyncMock(return_value={})
+        runtime["node"].execute=AsyncMock(return_value={"node_state":"running"})
+        runtime["stream"].execute=AsyncMock(side_effect=self.adapter.CheckError("stream_requires_review"))
+        await self.timers[0][0](None)
+        self.assertEqual(runtime["result"]["node_state"],"running")
+        self.assertEqual(runtime["stream_error"],"stream_requires_review")
+
+    async def test_stop_stream_preserves_node_intent_when_offline(self):
+        self.entry.options.update(log_host="10.77.0.20",log_consent=True,stream_recovery=True,node_recovery=True)
+        await self.adapter.async_setup_entry(self.hass,self.entry)
+        runtime=self.runtime();runtime["stream"].execute=AsyncMock(side_effect=self.adapter.CheckError("ssh_connection_refused"))
+        with self.assertRaises(self.adapter.HomeAssistantError):
+            await self.services["stop_stream"](types.SimpleNamespace(data={"entry_id":"synthetic"}))
+        self.assertFalse(self.entry.options["stream_recovery"])
+        self.assertTrue(self.entry.options["node_recovery"])
+        await self.adapter.reload_entry(self.hass,self.entry)
+        self.hass.config_entries.async_reload.assert_not_called()
+
+    async def test_stream_start_stop_and_node_results_are_independent(self):
+        self.entry.options.update(log_host="10.77.0.20",log_consent=True)
+        await self.adapter.async_setup_entry(self.hass,self.entry)
+        runtime=self.runtime();runtime["result"]={"node_state":"running"}
+        runtime["stream"].execute=AsyncMock(return_value={"stream_state":"running"})
+        await self.services["start_stream"](types.SimpleNamespace(data={"entry_id":"synthetic"}))
+        self.assertTrue(self.entry.options["stream_recovery"])
+        await self.services["stop_stream"](types.SimpleNamespace(data={"entry_id":"synthetic"}))
+        self.assertFalse(self.entry.options["stream_recovery"])
+        self.assertEqual(runtime["result"]["node_state"],"running")

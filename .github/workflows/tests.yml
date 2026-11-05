@@ -17,5 +17,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements-test.txt
       - run: python -m unittest discover -s tests -v
+      - run: cc -std=c11 -O2 -UNDEBUG -Wall -Wextra -Werror -Wno-misleading-indentation native/test_streamer.c -o /tmp/t5sm-native-test
+      - run: /tmp/t5sm-native-test
       - run: python tools/check_public_tree.py
       - run: python tools/build_package.py
