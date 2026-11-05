@@ -1,4 +1,5 @@
 """Real streamer manager in a synthetic POSIX tree, never on a satellite."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -57,6 +58,46 @@ print({'%u':'0','%a':m,'%u:%a':'0:'+m,'%u:%h':'0:'+str(s.st_nlink),'%s':str(s.st
         f=self.f;f.call('deploy',f.payload)
         self.assertIn('configuration_changed_stop_first',f.call('start',collector='10.77.0.21',expect=1))
         f.call('stop');f.call('deploy',collector='10.77.0.21');f.call('uninstall')
+
+    def test_configured_name_is_saved_and_rename_requires_stop(self):
+        f=self.f
+        f.script=f.script.replace('action=$1 host=$2','action=$1 host=Show8-1')
+        f.call('deploy',f.payload)
+        self.assertEqual((f.install/'config').read_text().split()[-1],'Show8-1')
+        f.script=f.script.replace('host=Show8-1','host=Show8-2')
+        self.assertIn('configuration_changed_stop_first',f.call('start',expect=1))
+        f.call('stop');f.call('deploy')
+        self.assertEqual((f.install/'config').read_text().split()[-1],'Show8-2')
+        f.call('uninstall')
+
+    def test_known_predecessor_upgrade_validates_before_stopping(self):
+        f=self.f;f.call('deploy',f.payload)
+        old_pid=(f.install/'pid').read_text()
+        # Simulate the released four-field manifest and reviewed predecessor pin.
+        config=f.install/'config'
+        config.write_text(' '.join(config.read_text().split()[:4])+'\n')
+        old_digest=f.digest
+        f.script=f.script.replace('7e5790102e7952039cfece8bc660e392f0f5f3ae6c0a516a66bb991be2086559',old_digest)
+        old_payload=f.payload;f.payload+=b'\0';f.digest=hashlib.sha256(f.payload).hexdigest()
+        self.assertIn('stream_state=invalid',f.call('inspect'))
+        self.assertIn('binary_checksum_failed',f.call('deploy',b'bad',expect=1))
+        self.assertEqual((f.install/'pid').read_text(),old_pid)
+        self.assertTrue(Path('/proc/'+old_pid.split()[0]).exists())
+        self.assertIn('stream_state=running',f.call('deploy',f.payload))
+        self.assertNotEqual((f.install/'pid').read_text(),old_pid)
+        self.assertEqual((f.install/'previous').read_bytes(),old_payload)
+        self.assertEqual(config.read_text().split()[-1],'10.77.0.10')
+        f.call('uninstall')
+
+    def test_predecessor_stop_and_unknown_manifest_refusal(self):
+        f=self.f;f.call('deploy',f.payload)
+        config=f.install/'config';old_digest=f.digest
+        f.script=f.script.replace('7e5790102e7952039cfece8bc660e392f0f5f3ae6c0a516a66bb991be2086559',old_digest)
+        f.digest='0'*64
+        self.assertIn('stream_state=invalid',f.call('stop'))
+        saved=config.read_text();config.write_text(saved.replace(old_digest,'1'*64))
+        self.assertIn('invalid_config',f.call('deploy',f.payload,expect=1))
+        config.write_text(saved);f.call('uninstall')
 
     def test_external_supervisor_is_not_modified(self):
         f=self.f;p=f.root/'inittab';p.write_text('pilot:respawn:/example/t5-log-stream\n')

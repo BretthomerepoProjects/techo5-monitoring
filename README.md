@@ -4,7 +4,9 @@
 
 A Home Assistant custom integration for inspecting TECHO5 Linux satellites and explicitly managing native Node Exporter metrics through SSH.
 
-**Experimental version 0.4.0.** Device-page controls can deploy and start, start, stop, uninstall, and check Node Exporter. SSH bootstrap remains available through Configure. This release requires device acceptance testing; no stable release has been declared. Automatic recovery is opt-in per satellite. Optional kernel and file-log forwarding is available through a separately managed native log streamer.
+**Experimental version 0.4.1.** Device-page controls can deploy and start, start, stop, uninstall, and check Node Exporter. SSH bootstrap remains available through Configure. This release requires device acceptance testing; no stable release has been declared. Automatic recovery is opt-in per satellite. Optional kernel and file-log forwarding is available through a separately managed native log streamer.
+
+Version 0.4.1 sends the integration's configured device name in the syslog hostname field. Updating through HACS and restarting Home Assistant lets enabled logging recovery upgrade the known managed streamer; otherwise use Deploy and start. Existing indexed records retain their earlier hostname. See the [log streamer guide](docs/log-streamer.md) for name formatting and upgrade details.
 
 Version 0.2.1 fixes a read-only SSH command race: no stdin EOF is sent when there is no upload. It also distinguishes credential-file, network, negotiation and command-channel failures using sanitized error codes.
 

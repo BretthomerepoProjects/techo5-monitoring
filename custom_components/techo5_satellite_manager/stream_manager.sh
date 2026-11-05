@@ -6,8 +6,17 @@ BASE=/data/ha-satellite-manager
 ROOT=$BASE/streamer
 RUN=/run/t5sm-streamer
 action=$1 host=$2 collector=$3 port=$4 arch=$5 expected=$6 size=$7
+# Only these reviewed predecessor payloads may be upgraded while running.
+case "$arch" in
+ armv7l) legacy=de8ca789340f7ef0c7f1128c2917f0619b2e6d58dfd41195252c7a0ccb82b485;;
+ aarch64) legacy=7e5790102e7952039cfece8bc660e392f0f5f3ae6c0a516a66bb991be2086559;;
+ *) legacy=none;;
+esac
+process_hash=$expected
 fail() { printf 'node_error=%s\n' "$1"; exit 1; }
 [ "$(id -u)" = 0 ] || fail root_required
+case "$host" in ''|*[!A-Za-z0-9_.-]*) fail invalid_device_name;; esac
+[ "${#host}" -le 63 ] || fail invalid_device_name
 [ -f /etc/techo5/boot.sh ] || fail unsupported_firmware
 [ "$(uname -m)" = "$arch" ] || fail architecture_changed
 case "$arch:$(uname -r)" in armv7l:3.18.*) profile=dot;; aarch64:4.9.*) profile=screen;; *) fail unsupported_firmware;; esac
@@ -26,7 +35,7 @@ valid_pid() {
  [ "$pid" -gt 1 ] && [ -r "/proc/$pid/stat" ] || return 1
  [ "$(readlink "/proc/$pid/exe")" = "$bin" ] || return 1
  [ "$(awk '{print $22}' "/proc/$pid/stat")" = "$birth" ] || return 1
- [ "$(sha256sum "/proc/$pid/exe" | awk '{print $1}')" = "$expected" ]
+ [ "$(sha256sum "/proc/$pid/exe" | awk '{print $1}')" = "$process_hash" ]
 }
 cleanup() {
  rc=$?; trap - EXIT HUP INT TERM
@@ -51,10 +60,11 @@ installed=no
 if [ -e "$bin" ]; then
  if [ -x "$bin" ] && [ "$(sha256sum "$bin" | awk '{print $1}')" = "$expected" ]; then installed=yes; else installed=invalid; fi
 fi
-saved_collector=$collector saved_port=$port saved_profile=$profile
+saved_collector=$collector saved_port=$port saved_profile=$profile saved_name=$host
 if [ -f "$ROOT/config" ]; then
- read saved_collector saved_port saved_profile saved_hash < "$ROOT/config"
- [ "$saved_hash" = "$expected" ] && [ "$saved_profile" = "$profile" ] || fail invalid_config
+ read saved_collector saved_port saved_profile saved_hash saved_name < "$ROOT/config"
+ [ "$saved_profile" = "$profile" ] || fail invalid_config
+ case "$saved_hash" in "$expected"|"$legacy") process_hash=$saved_hash;; *) fail invalid_config;; esac
  printf '%s\n' "$saved_collector" | awk -F. 'NF!=4 {exit 1} {for(i=1;i<=4;i++)if($i!~/^[0-9]+$/||$i>255)exit 1}' || fail invalid_config
  case "$saved_port" in ''|*[!0-9]*) fail invalid_config;; esac
  [ "$saved_port" -ge 1024 ] && [ "$saved_port" -le 65535 ] || fail invalid_config
@@ -63,11 +73,13 @@ owned=no;valid_pid && owned=yes
 state=not_installed
 case "$installed" in yes) state=stopped;; invalid) state=invalid;; esac
 [ "$owned" = no ] || state=running
+# A known previous build remains controllable but recovery requests its upgrade.
+[ "$process_hash" = "$expected" ] || state=invalid
 for p in $(pidof t5-log-stream 2>/dev/null || true); do
  if [ "$owned" = no ] || [ "$p" != "$pid" ]; then state=unmanaged; fi
 done
 report() {
- printf 'stream_state=%s\nstream_profile=%s\nstream_version=0.1.0\n' "$state" "$profile"
+ printf 'stream_state=%s\nstream_profile=%s\nstream_version=0.1.1\n' "$state" "$profile"
  # Only allowlisted scalar counters, never source records, enter HA attributes.
  if [ "$state" = running ] && [ -f "$RUN/status" ] && [ "$(stat -c '%s' "$RUN/status")" -le 2048 ]; then
   awk -F= 'NF==2 && $2~/^[0-9]+$/ && $1~/^(connected|written|dropped|truncated|kernel_lost|kernel_records|read_errors|files|kernel_open|queue|uptime|cpu_us|file_gaps)$/ {print "stream_"$1"="$2}' "$RUN/status"
@@ -80,7 +92,7 @@ case "$action" in deploy|start)
  [ -r /dev/kmsg ] && [ -c /dev/kmsg ] || fail kernel_log_unavailable
  if [ "$profile" = dot ]; then app=/data/techo5-linux/echod.log; else app=/data/techo5-linux/techo5.log; fi
  [ -f "$app" ] && [ ! -L "$app" ] && [ -r "$app" ] || fail application_log_unavailable
- if [ "$saved_collector $saved_port" != "$collector $port" ]; then
+ if [ "$saved_collector $saved_port" != "$collector $port" ] || { [ -n "$saved_name" ] && [ "$saved_name" != "$host" ]; }; then
   [ "$owned" = no ] && [ "$action" = deploy ] || fail configuration_changed_stop_first
  fi
  if [ "$action" = deploy ] && [ "$installed" != yes ]; then
@@ -90,14 +102,21 @@ case "$action" in deploy|start)
   [ "$(wc -c < "$ROOT/payload.tmp" | tr -d ' ')" = "$size" ] || fail incomplete_upload
   [ "$(sha256sum "$ROOT/payload.tmp" | awk '{print $1}')" = "$expected" ] || fail binary_checksum_failed
   chmod 700 "$ROOT/payload.tmp"
+  # Verify the full replacement before stopping a known managed predecessor.
+  if [ "$owned" = yes ]; then
+   valid_pid || fail process_changed;kill -TERM "$pid"
+   n=0;while valid_pid && [ "$n" -lt 8 ]; do sleep 1;n=$((n+1));done
+   valid_pid && fail stop_failed
+   owned=no
+  fi
   if [ "$installed" = invalid ]; then
    [ "$(stat -c '%s' "$bin")" -le 2097152 ] || fail invalid_payload_size
    mv "$bin" "$ROOT/previous"
   fi
-  mv "$ROOT/payload.tmp" "$bin";installed=yes
+  mv "$ROOT/payload.tmp" "$bin";installed=yes;process_hash=$expected
  fi
  [ "$installed" = yes ] || fail stream_requires_redeploy
- printf '%s %s %s %s\n' "$collector" "$port" "$profile" "$expected" > "$ROOT/config"
+ printf '%s %s %s %s %s\n' "$collector" "$port" "$profile" "$expected" "$host" > "$ROOT/config"
  if [ "$owned" = no ]; then
   mkdir -p "$RUN"
   rm -f "$RUN/status" "$RUN/status.tmp"

@@ -14,7 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define VERSION "0.1.0"
+#define VERSION "0.1.1"
 #define LINE 2048
 #define FRAME 2560
 #define SLOTS 96
@@ -150,13 +150,23 @@ static void status_write(void) {
     dprintf(fd,"version=%s\nconnected=%d\nwritten=%llu\ndropped=%llu\ntruncated=%llu\nkernel_lost=%llu\nkernel_records=%llu\nread_errors=%llu\nfiles=%d\nkernel_open=%d\nqueue=%d\nuptime=%llu\ncpu_us=%llu\nfile_gaps=%llu\n",VERSION,sock>=0&&!connecting,sent,dropped,truncated,lost,kernel_records,read_errors,available,kfd>=0,qcount,(unsigned long long)now(),cpu_us,file_gaps);
     close(fd);rename(tmp,status_path);
 }
+static int valid_device(const char *name) {
+    size_t n=strlen(name);
+    if(!n || n>=sizeof device) return 0;
+    for(size_t i=0;i<n;i++) {
+        unsigned char c=(unsigned char)name[i];
+        if(!((c>='A' && c<='Z') || (c>='a' && c<='z') ||
+             (c>='0' && c<='9') || c=='-' || c=='_' || c=='.')) return 0;
+    }
+    return 1;
+}
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--version")) {puts(VERSION);return 0;}
-    /* Positional validated data: destination, port, device IPv4, profile, runtime status. */
+    /* Positional validated data: destination, port, configured device token, profile, runtime status. */
     if(argc!=6) return 2;
     char *end;long port=strtol(argv[2],&end,10);
-    struct in_addr id;
-    if(*end || port<1024 || port>65535 || inet_pton(AF_INET,argv[1],&endpoint.sin_addr)!=1 || inet_pton(AF_INET,argv[3],&id)!=1) return 2;
+
+    if(*end || port<1024 || port>65535 || inet_pton(AF_INET,argv[1],&endpoint.sin_addr)!=1 || !valid_device(argv[3])) return 2;
     if(strcmp(argv[4],"dot") && strcmp(argv[4],"screen")) return 2;
     snprintf(device,sizeof device,"%s",argv[3]);status_path=argv[5];
     endpoint.sin_family=AF_INET;endpoint.sin_port=htons((uint16_t)port);

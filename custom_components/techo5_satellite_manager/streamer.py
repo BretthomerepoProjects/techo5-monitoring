@@ -2,6 +2,7 @@
 import asyncio
 import hashlib
 import http.client
+import re
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -10,11 +11,24 @@ from .core import CheckError, PROBE, parse_probe, validate_host
 from .node_exporter import script_request, ACTIONS
 from .recovery import RecoveryPolicy
 
-VERSION = "0.1.0"
-RELEASE = "0.4.0"
-PAYLOADS = {'armv7l': ('t5-log-stream-linux-armv7', 'de8ca789340f7ef0c7f1128c2917f0619b2e6d58dfd41195252c7a0ccb82b485'), 'aarch64': ('t5-log-stream-linux-arm64', '7e5790102e7952039cfece8bc660e392f0f5f3ae6c0a516a66bb991be2086559')}
+VERSION = "0.1.1"
+RELEASE = "0.4.1"
+PAYLOADS = {'armv7l': ('t5-log-stream-linux-armv7', 'debe4964e74a811381f3ae4962a506a2ea2661a91e22998dd31eae7f42dbb42c'), 'aarch64': ('t5-log-stream-linux-arm64', '73a38f6c1bf54eba11c2932d38f9f2eb2d9fb6de83ff0d12785e2ff848176e39')}
 COUNTERS = {"connected", "written", "dropped", "truncated", "kernel_lost",
             "kernel_records", "read_errors", "files", "kernel_open", "queue", "uptime", "cpu_us", "file_gaps"}
+
+
+def stream_device_name(settings):
+    """A bounded ASCII syslog hostname from the integration's configured name."""
+    name = settings.get("name") or settings["host"]
+    if not isinstance(name, str):
+        raise ValueError("Invalid device name")
+    token = re.sub(r"[^A-Za-z0-9_.-]+", "-", name.strip()).strip(".-")
+    if not token:
+        token = "satellite-" + hashlib.sha256(name.encode()).hexdigest()[:8]
+    if len(token) > 63:
+        token = token[:54] + "-" + hashlib.sha256(name.encode()).hexdigest()[:8]
+    return token
 
 
 def settings_for_stream(settings):
@@ -79,7 +93,9 @@ class StreamManager:
 
     async def execute(self,settings,action):
         if action not in ACTIONS: raise ValueError("Invalid action")
-        try: host,collector,port=settings_for_stream(settings)
+        try:
+            host,collector,port=settings_for_stream(settings)
+            device_name=stream_device_name(settings)
         except (ValueError,KeyError): raise CheckError("configure_log_streamer") from None
         try:
             async with asyncio.timeout(100 if action=="deploy" else 35):
@@ -90,7 +106,7 @@ class StreamManager:
                 if arch not in PAYLOADS: raise CheckError("stream_build_unavailable")
                 script=await self.executor(Path(__file__).with_name("stream_manager.sh").read_text,"utf-8")
                 async def run(verb,payload=None):
-                    cmd,data=script_request(script,verb,host,collector,port,arch,PAYLOADS[arch][1],payload)
+                    cmd,data=script_request(script,verb,device_name,collector,port,arch,PAYLOADS[arch][1],payload)
                     return parse_stream_status(await self.transport(settings,cmd,data))
                 state=await run("inspect")
                 if action=="inspect": return state

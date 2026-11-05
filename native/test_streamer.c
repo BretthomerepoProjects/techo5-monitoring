@@ -10,9 +10,12 @@ static void put(const char *path,const char *text,const char *mode) {
     FILE *f=fopen(path,mode);assert(f);fputs(text,f);fclose(f);
 }
 int main(void) {
-    strcpy(device,"synthetic");strcpy(boot,"synthetic-boot");
+    assert(valid_device("Show8-1") && valid_device("Office_Dot.2"));
+    assert(!valid_device("") && !valid_device("bad name") && !valid_device("bad\nforged"));
+    char too_long[65];memset(too_long,'x',64);too_long[64]=0;assert(!valid_device(too_long));
+    strcpy(device,"Show8-1");strcpy(boot,"synthetic-boot");
     emit("test",134,"hello\nforged\rheader",0);
-    assert(qcount==1 && strstr(queue[0].bytes,"hello forged header\n"));
+    assert(qcount==1 && strstr(queue[0].bytes," Show8-1 satellite-test:") && strstr(queue[0].bytes,"hello forged header\n"));
     for(int i=0;i<SLOTS+10;i++)emit("test",134,"bounded",0);
     assert(qcount==SLOTS && dropped==11);
     reset_queue();
