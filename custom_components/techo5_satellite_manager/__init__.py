@@ -11,11 +11,12 @@ from .core import DOMAIN, Checker, CheckError
 from .node_exporter import NodeManager, settings_for_node
 from .recovery import RecoveryPolicy, recovery_action
 from .ssh import probe
+from .cpu_policy import CpuManager
 from .streamer import StreamManager, StreamRecoveryPolicy, settings_for_stream
 
 PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.SWITCH]
 OPERATIONS = ("check", "deploy_node", "start_node", "stop_node", "uninstall_node", "deploy_stream", "start_stream", "stop_stream", "uninstall_stream")
-SERVICES = (*OPERATIONS, "set_node_recovery", "set_stream_recovery")
+SERVICES = (*OPERATIONS, "set_node_recovery", "set_stream_recovery", "set_cpu_all_cores")
 
 
 def set_recovery(hass, runtime, enabled, service="node"):
@@ -42,6 +43,46 @@ async def refresh_stream(hass, runtime, automatic):
         runtime["stream_error"] = str(exc)
         if automatic and runtime["settings"].get("stream_recovery", False):
             runtime["stream_recovery"].failed(str(exc))
+
+
+CPU_OPTIONS = {"cpu_all_cores", "cpu_restore_pending"}
+
+
+def save_cpu_intent(hass, runtime, **changes):
+    runtime["settings"].update(changes)
+    entry = runtime["entry"]
+    hass.config_entries.async_update_entry(entry, options={**entry.options, **changes})
+    async_dispatcher_send(hass, DOMAIN + entry.entry_id)
+
+
+async def refresh_cpu(hass, runtime, automatic):
+    settings = runtime["settings"]
+    if not settings.get("cpu_all_cores") and not settings.get("cpu_restore_pending"):
+        return
+    policy = runtime["cpu_retry"]
+    if automatic and policy.clock() < policy.next_attempt:
+        return
+    try:
+        result = await runtime["cpu"].execute(settings, "inspect")
+        settings = runtime["settings"]
+        enabled = settings.get("cpu_all_cores", False)
+        if result["cpu_policy_state"] == "unsupported":
+            if enabled or settings.get("cpu_restore_pending"):
+                raise CheckError("cpu_policy_unsupported")
+        elif automatic:
+            if enabled and result["cpu_minimum"] != 4:
+                result = await runtime["cpu"].execute(settings, "enable")
+            elif not enabled and settings.get("cpu_restore_pending"):
+                result = await runtime["cpu"].execute(settings, "disable")
+                if not runtime["settings"].get("cpu_all_cores"):
+                    save_cpu_intent(hass, runtime, cpu_restore_pending=False)
+        runtime["cpu_result"] = result
+        runtime["cpu_error"] = None
+        policy.reset()
+    except CheckError as exc:
+        runtime["cpu_result"] = {"cpu_policy_state": "unknown"}
+        runtime["cpu_error"] = str(exc)
+        policy.failed(str(exc))
 
 
 async def run_operation(hass, entry_id, operation):
@@ -76,6 +117,14 @@ async def run_operation(hass, entry_id, operation):
     automatic = operation in {"monitor", "recover_node"}
     recovery_attempted = False
     try:
+        if operation == "recover_cpu":
+            await refresh_cpu(hass, runtime, True)
+            runtime["status"] = "checked"
+            if runtime["cpu_error"]:
+                raise HomeAssistantError("CPU policy failed: " + runtime["cpu_error"])
+            return
+        if operation in {"check", "monitor", "recover_node"}:
+            await refresh_cpu(hass, runtime, operation != "check")
         if is_stream:
             if operation in {"deploy_stream", "start_stream"}:
                 settings_for_stream(runtime["settings"])
@@ -138,7 +187,9 @@ async def run_operation(hass, entry_id, operation):
         runtime["status"] = code
         raise HomeAssistantError("Satellite operation failed: " + code) from None
     except asyncio.CancelledError:
-        if is_stream: runtime["stream_result"] = {"stream_state": "unknown", "log_ingestion_verified": False}
+        if operation == "recover_cpu":
+            runtime["cpu_result"] = {"cpu_policy_state": "unknown"}
+        elif is_stream: runtime["stream_result"] = {"stream_state": "unknown", "log_ingestion_verified": False}
         else: runtime["result"] = {"node_state": "unknown"}
         runtime["status"] = "cancelled_check_before_retry"
         raise
@@ -190,6 +241,19 @@ async def async_setup_entry(hass, entry):
                 await run_operation(hass, call.data["entry_id"], "recover_stream")
         async_register_admin_service(hass, DOMAIN, "set_stream_recovery", stream_recovery_handler,
             schema=vol.Schema({vol.Required("entry_id"): str, vol.Required("enabled"): bool}))
+        async def cpu_handler(call):
+            runtime = hass.data[DOMAIN]["entries"].get(call.data["entry_id"])
+            if runtime is None or runtime["unloading"]:
+                raise HomeAssistantError("Unknown satellite entry")
+            enabled = call.data["enabled"]
+            # Persist OFF even if a satellite is offline or a prior operation is busy.
+            save_cpu_intent(hass, runtime, cpu_all_cores=enabled, cpu_restore_pending=not enabled)
+            runtime["cpu_retry"].reset()
+            runtime["ensure_monitor"]()
+            if runtime["task"] is None and runtime["stop_task"] is None:
+                await run_operation(hass, call.data["entry_id"], "recover_cpu")
+        async_register_admin_service(hass, DOMAIN, "set_cpu_all_cores", cpu_handler,
+            schema=vol.Schema({vol.Required("entry_id"): str, vol.Required("enabled"): bool}))
     transport = lambda settings, command, payload=None: probe(hass, settings, command, payload)
     idle = asyncio.Event()
     idle.set()
@@ -199,7 +263,10 @@ async def async_setup_entry(hass, entry):
         "node": NodeManager(transport, hass.async_add_executor_job), "recovery": RecoveryPolicy(),
         "recovery_check_failed": False,
         "stream": StreamManager(transport, hass.async_add_executor_job),
-        "stream_recovery": StreamRecoveryPolicy(), "stream_result": {}, "stream_error": None}
+        "stream_recovery": StreamRecoveryPolicy(), "stream_result": {}, "stream_error": None,
+        "cpu": CpuManager(transport, hass.async_add_executor_job), "cpu_retry": RecoveryPolicy(),
+        "cpu_result": {"cpu_policy_state": "not_checked"}, "cpu_error": None,
+        "monitor_registered": False}
     hass.data[DOMAIN]["entries"][entry.entry_id] = runtime
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -210,8 +277,14 @@ async def async_setup_entry(hass, entry):
                 await run_operation(hass, entry.entry_id, "monitor")
             except HomeAssistantError:
                 pass
-        if runtime["settings"].get("collector_host") or runtime["settings"].get("log_host"):
-            entry.async_on_unload(async_track_time_interval(hass, monitor, timedelta(seconds=60)))
+        def ensure_monitor():
+            if not runtime["monitor_registered"]:
+                entry.async_on_unload(async_track_time_interval(hass, monitor, timedelta(seconds=60)))
+                runtime["monitor_registered"] = True
+        runtime["ensure_monitor"] = ensure_monitor
+        if any(runtime["settings"].get(key) for key in
+               ("collector_host", "log_host", "cpu_all_cores", "cpu_restore_pending")):
+            ensure_monitor()
         entry.async_on_unload(entry.add_update_listener(reload_entry))
     except Exception:
         hass.data[DOMAIN]["entries"].pop(entry.entry_id, None)
@@ -227,8 +300,8 @@ async def reload_entry(hass, entry):
     runtime = hass.data.get(DOMAIN, {}).get("entries", {}).get(entry.entry_id)
     saved = {**entry.data, **entry.options}
     if runtime is not None:
-        old = {key: value for key, value in runtime["settings"].items() if key not in {"node_recovery", "stream_recovery"}}
-        new = {key: value for key, value in saved.items() if key not in {"node_recovery", "stream_recovery"}}
+        old = {key: value for key, value in runtime["settings"].items() if key not in {"node_recovery", "stream_recovery", *CPU_OPTIONS}}
+        new = {key: value for key, value in saved.items() if key not in {"node_recovery", "stream_recovery", *CPU_OPTIONS}}
         if old == new:
             runtime["settings"] = saved
             async_dispatcher_send(hass, DOMAIN + entry.entry_id)

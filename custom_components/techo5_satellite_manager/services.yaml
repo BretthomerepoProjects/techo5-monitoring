@@ -111,3 +111,16 @@ set_stream_recovery:
       required: true
       selector:
         boolean:
+
+set_cpu_all_cores:
+  name: Keep all CPU cores online
+  description: Request all cores through supported MediaTek HPS controls, preserving thermal limits. Disabling restores the prior minimum.
+  fields:
+    entry_id:
+      required: true
+      selector:
+        text:
+    enabled:
+      required: true
+      selector:
+        boolean:

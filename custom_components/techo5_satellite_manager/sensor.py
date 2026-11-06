@@ -5,7 +5,7 @@ from .core import DOMAIN
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([SatelliteStatus(entry), NodeExporterStatus(entry), LogStreamerStatus(entry)])
+    async_add_entities([SatelliteStatus(entry), NodeExporterStatus(entry), LogStreamerStatus(entry), CpuPolicyStatus(entry)])
 
 
 class SatelliteStatus(SensorEntity):
@@ -64,3 +64,24 @@ class LogStreamerStatus(SatelliteStatus):
     @property
     def native_value(self):
         return self.hass.data[DOMAIN]["entries"][self.entry.entry_id]["stream_result"].get("stream_state", "unknown")
+
+
+class CpuPolicyStatus(SatelliteStatus):
+    _attr_name = "CPU core policy"
+    _attr_icon = "mdi:cpu-64-bit"
+
+    def __init__(self, entry):
+        super().__init__(entry)
+        self._attr_unique_id = entry.entry_id + "_cpu_policy"
+
+    @property
+    def native_value(self):
+        return self.hass.data[DOMAIN]["entries"][self.entry.entry_id]["cpu_result"].get("cpu_policy_state", "unknown")
+
+    @property
+    def extra_state_attributes(self):
+        runtime = self.hass.data[DOMAIN]["entries"][self.entry.entry_id]
+        return {**runtime["cpu_result"], "cpu_error": runtime["cpu_error"],
+                "enabled": runtime["settings"].get("cpu_all_cores", False),
+                "restore_pending": runtime["settings"].get("cpu_restore_pending", False),
+                "retry_failures": runtime["cpu_retry"].failures}

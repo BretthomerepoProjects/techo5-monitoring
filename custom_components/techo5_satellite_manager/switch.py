@@ -6,7 +6,7 @@ from .core import DOMAIN
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities([NodeRecoverySwitch(entry), StreamRecoverySwitch(entry)])
+    async_add_entities([NodeRecoverySwitch(entry), StreamRecoverySwitch(entry), CpuAllCoresSwitch(entry)])
 
 
 class NodeRecoverySwitch(SwitchEntity):
@@ -55,4 +55,25 @@ class StreamRecoverySwitch(NodeRecoverySwitch):
 
     async def async_turn_off(self, **kwargs):
         await self.hass.services.async_call(DOMAIN, "set_stream_recovery",
+            {"entry_id": self.entry.entry_id, "enabled": False}, blocking=True, context=self._context)
+
+
+class CpuAllCoresSwitch(NodeRecoverySwitch):
+    _attr_name = "Keep all CPU cores online"
+    _attr_icon = "mdi:cpu-64-bit"
+
+    def __init__(self, entry):
+        super().__init__(entry)
+        self._attr_unique_id = entry.entry_id + "_cpu_all_cores"
+
+    @property
+    def is_on(self):
+        return self.hass.data[DOMAIN]["entries"][self.entry.entry_id]["settings"].get("cpu_all_cores", False)
+
+    async def async_turn_on(self, **kwargs):
+        await self.hass.services.async_call(DOMAIN, "set_cpu_all_cores",
+            {"entry_id": self.entry.entry_id, "enabled": True}, blocking=True, context=self._context)
+
+    async def async_turn_off(self, **kwargs):
+        await self.hass.services.async_call(DOMAIN, "set_cpu_all_cores",
             {"entry_id": self.entry.entry_id, "enabled": False}, blocking=True, context=self._context)

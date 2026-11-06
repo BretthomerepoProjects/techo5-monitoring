@@ -149,3 +149,7 @@ The optional [Grafana files and setup guide](grafana/README.md) include a comple
 ## Optional log streamer
 
 See [log streamer setup, sources and limits](docs/log-streamer.md). It uses one small static process on each satellite and the existing SSH connection for management. Logging has its own destination, controls, status and opt-in recovery. No firmware rebuild, boot-hook changes or new inbound network listener are required. The SSH key-generation feature is not included in this update.
+
+## Optional CPU core availability
+
+A per-device **Keep all CPU cores online** switch and **CPU core policy** sensor manage supported four-core MediaTek HPS devices independently of metrics/logging. The choice is opt-in, retained in HA, and reapplied after reboot on the 60-second monitor once SSH is available. Thermal/power limits remain in control. Switching off restores the saved previous minimum when possible. See [CPU policy](docs/cpu-policy.md) for compatibility, rollback and validation limits. This feature is experimental; actual reboot recovery and broader device acceptance remain unverified.
