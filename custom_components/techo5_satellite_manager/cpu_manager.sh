@@ -7,19 +7,29 @@ unsupported() {
 case "$1" in inspect|enable|disable) ;; *) fail invalid_action;; esac
 [ "$(id -u)" = 0 ] || fail root_required
 [ -f /etc/techo5/boot.sh ] || unsupported
-# This control is for the four-core MediaTek HPS interface, not arbitrary CPUs.
-[ "$(uname -m)" = aarch64 ] || unsupported
-case "$(uname -r)" in 4.9.*) ;; *) unsupported;; esac
+# Match the actual HPS interface as well as architecture and kernel family.
+case "$(uname -m):$(uname -r)" in
+    aarch64:4.9.*)
+        minimum_file=num_base_custom1
+        limits="num_limit_thermal num_limit_power_serv num_limit_custom1 num_limit_custom2 num_limit_low_battery num_limit_ultra_power_saving"
+        ;;
+    armv7l:3.18.*)
+        minimum_file=num_base_perf_serv
+        limits="num_limit_thermal num_limit_power_serv num_limit_low_battery num_limit_ultra_power_saving"
+        ;;
+    *) unsupported;;
+esac
 [ "$(cat /sys/devices/system/cpu/present)" = 0-3 ] || unsupported
-for f in enabled num_base_custom1 num_limit_thermal num_limit_power_serv num_limit_custom1 num_limit_custom2; do
+for f in enabled "$minimum_file" $limits; do
     [ -r /proc/hps/$f ] || unsupported
 done
 [ "$(cat /proc/hps/enabled)" = 1 ] || unsupported
-for f in num_base_custom1 num_limit_thermal num_limit_power_serv num_limit_custom1 num_limit_custom2; do
+for f in "$minimum_file" $limits; do
     case "$(cat /proc/hps/$f)" in 1|2|3|4) ;; *) unsupported;; esac
 done
-base=/data/ha-satellite-manager
-dir=$base/cpu-policy
+# Original minimum is per boot. RAM storage avoids assumptions about /data ownership.
+dir=/run/ha-satellite-cpu-policy
+legacy=/data/ha-satellite-manager/cpu-policy
 boot=$(cat /proc/sys/kernel/random/boot_id)
 case "$boot" in ''|*[!a-f0-9-]*) fail cpu_policy_conflict;; esac
 safe_dir() {
@@ -29,57 +39,75 @@ safe_dir() {
 }
 if [ "$1" != inspect ]; then
     umask 077
-    safe_dir /data
-    [ -e "$base" ] || mkdir "$base"
-    safe_dir "$base"
+    [ ! -L /run ] && [ -d /run ] && [ "$(stat -c %u /run)" = 0 ] || fail unsafe_path
+    case "$(stat -c %a /run)" in 700|750|755|1777) ;; *) fail unsafe_path;; esac
     [ -e "$dir" ] || mkdir "$dir"
     safe_dir "$dir"
-    mkdir /run/techo5-cpu-policy.lock 2>/dev/null || fail remote_busy
-    trap 'rmdir /run/techo5-cpu-policy.lock' EXIT
+    mkdir "$dir/lock" 2>/dev/null || fail remote_busy
+    trap 'rmdir "$dir/lock"' EXIT
 fi
 old_boot=none
 old_min=none
-if [ -e "$dir/baseline" ] || [ -L "$dir/baseline" ]; then
-    safe_dir "$base"
-    safe_dir "$dir"
-    [ ! -L "$dir/baseline" ] && [ -f "$dir/baseline" ] || fail unsafe_path
-    [ "$(stat -c %u:%a "$dir/baseline")" = 0:600 ] || fail unsafe_path
-    [ "$(wc -c < "$dir/baseline")" -le 64 ] || fail cpu_policy_conflict
-    read -r old_boot old_min < "$dir/baseline"
+baseline=$dir/baseline
+legacy_used=no
+if [ ! -e "$baseline" ] && [ ! -L "$baseline" ] && { [ -e "$legacy/baseline" ] || [ -L "$legacy/baseline" ]; }; then
+    # v0.5.0 baselines are accepted only through the original protected path.
+    safe_dir /data
+    safe_dir /data/ha-satellite-manager
+    safe_dir "$legacy"
+    baseline=$legacy/baseline
+    legacy_used=yes
+fi
+if [ -e "$baseline" ] || [ -L "$baseline" ]; then
+    if [ "$legacy_used" = no ]; then safe_dir "$dir"; fi
+    [ ! -L "$baseline" ] && [ -f "$baseline" ] || fail unsafe_path
+    [ "$(stat -c %u:%a "$baseline")" = 0:600 ] || fail unsafe_path
+    [ "$(wc -c < "$baseline")" -le 64 ] || fail cpu_policy_conflict
+    read -r old_boot old_min extra < "$baseline"
+    [ -z "$extra" ] || fail cpu_policy_conflict
     case "$old_min" in 1|2|3|4) ;; *) fail cpu_policy_conflict;; esac
     case "$old_boot" in ''|*[!a-f0-9-]*) fail cpu_policy_conflict;; esac
 fi
-minimum=$(cat /proc/hps/num_base_custom1)
+set_minimum() {
+    # Some vendor proc handlers report a short/error write after applying it.
+    # Success is determined by readback, never by the write return alone.
+    printf '%s' "$1" > /proc/hps/$minimum_file 2>/dev/null || :
+    [ "$(cat /proc/hps/$minimum_file)" = "$1" ] || fail cpu_policy_write_failed
+}
+minimum=$(cat /proc/hps/$minimum_file)
 case "$1" in
 enable)
-    if [ "$old_boot" != "$boot" ]; then
+    if [ "$old_boot" = "$boot" ] && [ "$minimum" != 4 ] && [ "$minimum" != "$old_min" ]; then fail cpu_policy_conflict; fi
+    if [ "$old_boot" != "$boot" ] || [ "$legacy_used" = yes ]; then
+        saved_min=$minimum
+        if [ "$old_boot" = "$boot" ]; then saved_min=$old_min; fi
         [ ! -e "$dir/baseline.new" ] && [ ! -L "$dir/baseline.new" ] || fail unsafe_path
-        printf '%s %s\n' "$boot" "$minimum" > "$dir/baseline.new"
+        printf '%s %s\n' "$boot" "$saved_min" > "$dir/baseline.new"
         mv "$dir/baseline.new" "$dir/baseline"
+        if [ "$legacy_used" = yes ]; then rm "$legacy/baseline"; fi
     elif [ "$minimum" != 4 ] && [ "$minimum" != "$old_min" ]; then
         fail cpu_policy_conflict
     fi
-    [ "$minimum" = 4 ] || printf '4\n' > /proc/hps/num_base_custom1
+    [ "$minimum" = 4 ] || set_minimum 4
     # Give HPS time to react; never force cores or bypass its safety limits.
     sleep 2
     ;;
 disable)
     if [ "$old_boot" = "$boot" ]; then
         if [ "$minimum" != 4 ] && [ "$minimum" != "$old_min" ]; then fail cpu_policy_conflict; fi
-        printf '%s\n' "$old_min" > /proc/hps/num_base_custom1
-        [ "$(cat /proc/hps/num_base_custom1)" = "$old_min" ] || fail cpu_policy_write_failed
+        [ "$minimum" = "$old_min" ] || set_minimum "$old_min"
     fi
-    rm -f "$dir/baseline"
+    rm -f "$baseline"
     ;;
 esac
-minimum=$(cat /proc/hps/num_base_custom1)
+minimum=$(cat /proc/hps/$minimum_file)
 online=$(cat /sys/devices/system/cpu/online)
 thermal=$(cat /proc/hps/num_limit_thermal)
 state=automatic
 if [ "$minimum" = 4 ]; then
     state=requested
     [ "$online" != 0-3 ] || state=all_online
-    for f in num_limit_thermal num_limit_power_serv num_limit_custom1 num_limit_custom2; do
+    for f in $limits; do
         [ "$(cat /proc/hps/$f)" = 4 ] || state=constrained
     done
 fi

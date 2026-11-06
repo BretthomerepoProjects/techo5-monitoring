@@ -57,8 +57,6 @@ def save_cpu_intent(hass, runtime, **changes):
 
 async def refresh_cpu(hass, runtime, automatic):
     settings = runtime["settings"]
-    if not settings.get("cpu_all_cores") and not settings.get("cpu_restore_pending"):
-        return
     policy = runtime["cpu_retry"]
     if automatic and policy.clock() < policy.next_attempt:
         return
@@ -80,7 +78,7 @@ async def refresh_cpu(hass, runtime, automatic):
         runtime["cpu_error"] = None
         policy.reset()
     except CheckError as exc:
-        runtime["cpu_result"] = {"cpu_policy_state": "unknown"}
+        runtime["cpu_result"] = {"cpu_policy_state": "unsupported" if str(exc) == "cpu_policy_unsupported" else "unknown"}
         runtime["cpu_error"] = str(exc)
         policy.failed(str(exc))
 
@@ -123,7 +121,8 @@ async def run_operation(hass, entry_id, operation):
             if runtime["cpu_error"]:
                 raise HomeAssistantError("CPU policy failed: " + runtime["cpu_error"])
             return
-        if operation in {"check", "monitor", "recover_node"}:
+        if operation in {"check", "monitor", "recover_node"} and any(
+                runtime["settings"].get(key) for key in CPU_OPTIONS):
             await refresh_cpu(hass, runtime, operation != "check")
         if is_stream:
             if operation in {"deploy_stream", "start_stream"}:
@@ -150,6 +149,8 @@ async def run_operation(hass, entry_id, operation):
         async_dispatcher_send(hass, DOMAIN + entry_id)
         if operation in {"check", "monitor", "recover_node"}:
             result = await runtime["checker"].check(runtime["settings"])
+            if "kernel" in result and not any(runtime["settings"].get(key) for key in CPU_OPTIONS):
+                await refresh_cpu(hass, runtime, False)
             if runtime["settings"].get("collector_host"):
                 result.update(await runtime["node"].execute(runtime["settings"], "inspect"))
             else:

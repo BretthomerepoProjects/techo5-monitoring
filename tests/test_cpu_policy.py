@@ -100,3 +100,17 @@ class Lifecycle(unittest.IsolatedAsyncioTestCase):
         await self.setup_cpu({"cpu_restore_pending":True})
         self.assertEqual(len(self.timers),1)
         self.probe.assert_not_called()
+
+    async def test_disabled_policy_still_has_read_only_status_after_check(self):
+        r=await self.setup_cpu()
+        r["checker"].check.return_value={"kernel":"4.9.337-test","arch":"aarch64"}
+        await self.adapter.run_operation(self.hass,"synthetic","check")
+        self.assertEqual(r["cpu"].execute.await_count,1)
+        self.assertEqual(r["cpu"].execute.await_args.args[1],"inspect")
+        self.assertEqual(r["cpu_result"]["cpu_policy_state"],"automatic")
+
+    async def test_unsupported_is_reported_as_unsupported_instead_of_unknown(self):
+        r=await self.setup_cpu({"cpu_all_cores":True})
+        r["cpu"].execute.return_value={"cpu_policy_state":"unsupported"}
+        await self.timers[0][0](None)
+        self.assertEqual(r["cpu_result"]["cpu_policy_state"],"unsupported")
